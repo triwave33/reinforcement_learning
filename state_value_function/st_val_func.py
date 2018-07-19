@@ -104,10 +104,10 @@ class Agent():
         else:
             for i, action in enumerate(ACTIONS):
                 #print("action: %s" % action)
-                out += self.pi(state, action)  * agent.reward(agent.get_pos(),action) # 報酬
-                #print("before move, pos:%s" % str(agent.get_pos()))
+                out += self.pi(state, action)  * self.reward(self.get_pos(),action) # 報酬
+                #print("before move, pos:%s" % str(self.get_pos()))
                 self.move(action) # 移動してself.get_pos()の値が更新
-                #print("after move, pos:%s" % str(agent.get_pos()))
+                #print("after move, pos:%s" % str(self.get_pos()))
     
                 ## 価値関数を再帰呼び出し
                 # state変数には動いた先の位置、つまりself.get_pos()を使用
