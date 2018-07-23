@@ -233,3 +233,26 @@ for i in range(5):
             head_length=0.2, color=max_color_w[3,x,y])
 plt.savefig('opt_act.png')
 plt.close()
+
+# 状態価値関数を表示。状態関数は行動価値関数の行動に関しての期待をとる
+ax = plt.gca()
+plt.xlim(0,5)
+plt.ylim(0,5)
+ax.xaxis.set_ticklabels([])
+ax.yaxis.set_ticklabels([])
+v_array = np.mean(q_array, axis=0)
+v_array_round = np.round(v_array, decimals=2)
+for i in range(5):
+    for j in range(5):
+        # rect
+        rect = plt.Rectangle(xy =(i,j) , width=1, height=1, fill=False)
+        ax.add_patch(rect)
+        # 座標のインデックスの調整
+        x = -j-1 
+        y = i
+        # text
+        plt.text(i+ 0.4, j+0.5, "%s" % (str(v_array_round[x,y])))
+plt.savefig('v_pi.png')
+plt.close()
+
+
