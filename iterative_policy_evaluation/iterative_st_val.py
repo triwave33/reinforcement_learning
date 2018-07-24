@@ -117,10 +117,10 @@ while(True):
             v = V[i,j]
             tmp = 0
             for action in ACTIONS:
-                agent.set_pos([i,j])
+                agent.set_pos([i,j]) # 移動前の状態に初期化
                 s = agent.get_pos()
-                agent.move(action)
-                s_dash = agent.get_pos()
+                agent.move(action) # 移動
+                s_dash = agent.get_pos() # 移動後の状態
                 tmp += agent.pi(s, action) * 1.0 *\
                         (agent.reward(s,action) + GAMMA * V[s_dash[0], s_dash[1]])
                 #print("i: %d, j: %d, s:%s, a:%5s, s';%s" %(i,j, str(s), action,  str(s_dash)))
