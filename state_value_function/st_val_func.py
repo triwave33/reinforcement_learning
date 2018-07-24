@@ -1,7 +1,7 @@
 ### -*-coding:utf-8-*-
 import numpy as np
 from itertools import product
-
+import matplotlib.pyplot as plt
 
 class Agent():
 
@@ -103,11 +103,9 @@ class Agent():
             return out
         else:
             for i, action in enumerate(ACTIONS):
-                #print("action: %s" % action)
+                self.set_pos(state) # 初期化
                 out += self.pi(state, action)  * self.reward(self.get_pos(),action) # 報酬
-                #print("before move, pos:%s" % str(self.get_pos()))
                 self.move(action) # 移動してself.get_pos()の値が更新
-                #print("after move, pos:%s" % str(self.get_pos()))
     
                 ## 価値関数を再帰呼び出し
                 # state変数には動いた先の位置、つまりself.get_pos()を使用
@@ -121,7 +119,7 @@ class Agent():
 # agentの生成
 agent = Agent([0,1])
 
-ITER_NUM = 4 # 状態価値関数推定のためにt->ITER_NUMまで辿る
+ITER_NUM = 8 # 状態価値関数推定のためにt->ITER_NUMまで辿る
 GAMMA = 0.9
 ACTIONS = ['right', 'up', 'left', 'down']
 
@@ -131,17 +129,21 @@ print("状態価値関数（Vpi")
 print("%dステップ先までを計算" % ITER_NUM)
 
 # 5*5全てのマスの状態価値関数を計算
-v_array = np.zeros((5,5))
+v_array_trend = np.zeros((ITER_NUM, 5,5))
+for iter_num in range(ITER_NUM):
+    for i in range(5):
+        for j in range(5):
+            v_array_trend[iter_num,i,j] = agent.V_pi([i,j],1,0,iter_num+1)
+
+# 最終結果をコンソールに表示
+print("v_array after %d iteration" % ITER_NUM)
+print(v_array_trend[-1,:,:])
+
+# 5x5マスにプロット
 for i in range(5):
     for j in range(5):
-        v_array[i,j] = agent.V_pi([i,j], 1, 0, ITER_NUM)
-
-print("Vpi")
-
-print(v_array)
-
-
-
-
+        plt.subplot(5,5,5*i+j+1)
+        plt.plot(v_array_trend[:,i,j])
+        plt.show()
 
 
