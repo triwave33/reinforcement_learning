@@ -47,7 +47,7 @@ num_state = 4
 num_action = 2
 num_iteration = 10 # エピソード終了までの反復回数
 num_episode = 10000 # MCサンプリング数
-render = False # 描写モード
+render = True # 描写モード
 
 # Qの初期化
 V = np.zeros((N,N,N,N))
@@ -62,51 +62,39 @@ returns = [[[[[[] for s3 in range(N)] for s2 in range(N)]\
                     for s1 in range(N)] for s0 in range(N)] for action in range(num_action)]
 
 
-reward_list = []
+return_list = []
 # 学習フェイズ
 for epi in range(num_episode):
     delta = 0
 
     done = False
     observation = env.reset() # 環境をリセット
+    s = [assign(min_list[i], max_list[i], N, observation[i]) for i in range(num_state)]
     if render:
         env.render()
-    for _ in range(10):
-        observation, _, _, _  = env.step(env.action_space.sample())
-    #print('observation')
-    #print(observation)
-    s0 = [assign(min_list[i], max_list[i], N, observation[i]) for i in range(num_state)]
-    #print("s0")
-    #print(s0)
 
-    a0 = np.random.randint(0,2)
-    #print("a0: %d" % a0)
-    tmp = 0
-    # 初回のアクション 
-    observation, reward, done, info = env.step(a0)
-    tmp += reward # 移動後の報酬を加算
-    s = s0
+    s_list = [] # エピソードの状態履歴
+    a_list = [] # エピソードの状態履歴
+    r_list = [] # エピソードの状態履歴
 
-    count =1
     while(done == False):
         if render:
             env.render()
-        #time.sleep(.1)
+
+        s_list.append(s)
         action = np.random.choice([0,1], p = pi[:,s[0],s[1],s[2],s[3]])
+        a_list.append(action)
         #print("action: %d" % action)
         observation, reward, done, info = env.step(action)
+        r_list.append(reward)
+
         s = [assign(min_list[i], max_list[i], N, observation[i]) for i in range(num_state)]
-        #print("s")
-        #print s
-        #tmp += GAMMA**(count) * reward # 移動後の報酬を加算
-        # 割引なし
-        tmp +=  reward # 移動後の報酬を加算
-        #print("i: %d, j: %d, s:%s, a:%5s, s';%s" %(i,j, str(s), action,  str(s_dash)))
-        count += 1
-    returns[a0][s0[0]][s0[1]][s0[2]][s0[3]].append(tmp)
-    #print("count: %d, delta: %f, abs: %f" % (count, delta, abs(v-V[i,j])))
-    reward_list.append(tmp)
-    print("episode#: %d, reward: %3d" % (epi, tmp))
+    tmp = 0
+    for i in range(len(s_list))[::-1]: # リストを逆側から検索
+        tmp += r_list[i]
+        returns[a_list[i]][s_list[i][0]][s_list[i][1]][s_list[i][2]][s_list[i][3]].append(tmp)
+    return_list.append(tmp)
+    print("eps: %.3f, epi#: %d, step_len: %d, reward: %3d" % (EPSILON, epi, len(r_list), tmp))
 
     
     returns_average =np.array([[[[[np.mean(returns[a][_s0][_s1][_s2][_s3]) \

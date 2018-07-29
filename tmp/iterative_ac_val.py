@@ -90,60 +90,59 @@ class Agent():
     
     #def transition(self, state, action, next_state)
     
-    def V_pi(self, state, n, out, iter_num):
-        #print('\nnow entering V_pi at n=%d, state=%s' %(n, str(state)))
-        # state:関数呼び出し時の状態
-        # n:再帰関数の呼び出し回数。関数実行時は1を指定
-        # out:返り値用の変数。関数実行時は0を指定
-    
-        if n==iter_num:    # 終端状態
-            for i, action in enumerate(Agent.actions):
-                out += self.pi(state, action) * self.reward(state,action)
-                #print("terminal condition")
-            return out
-        else:
-            for i, action in enumerate(ACTIONS):
-                self.set_pos(state) # 初期化
-                out += self.pi(state, action)  * self.reward(self.get_pos(),action) # 報酬
-                self.move(action) # 移動してself.get_pos()の値が更新
-    
-                ## 価値関数を再帰呼び出し
-                # state変数には動いた先の位置、つまりself.get_pos()を使用
-                out +=  self.pi(self.get_pos(), action) * \
-                        self.V_pi(self.get_pos(), n+1, 0,  iter_num) * GAMMA
-                agent.set_pos(state) #  再帰先から戻ったらエージェントを元の地点に初期化
-                #print("agent pos set to %s, at n:%d" % (str(state), n))
-            return out
-
    
 # agentの生成
 agent = Agent([0,1])
 
-ITER_NUM = 8 # 状態価値関数推定のためにt->ITER_NUMまで辿る
 GAMMA = 0.9
 ACTIONS = ['right', 'up', 'left', 'down']
+num_row = 5 
+num_col = 5
 
-agent.V_pi([0,1], 1, 0, ITER_NUM)
+# Vの初期化
+Q = np.zeros((4,5,5))
 
-print("状態価値関数（Vpi")
-print("%dステップ先までを計算" % ITER_NUM)
+print("start iteration")
 
-# 5*5全てのマスの状態価値関数を計算
-v_array_trend = np.zeros((ITER_NUM, 5,5))
-for iter_num in range(ITER_NUM):
-    for i in range(5):
-        for j in range(5):
-            v_array_trend[iter_num,i,j] = agent.V_pi([i,j],1,0,iter_num+1)
+count = 0
 
-# 最終結果をコンソールに表示
-print("v_array after %d iteration" % ITER_NUM)
-print(v_array_trend[-1,:,:])
+N = 1000
+Q_trend = np.zeros((N, len(ACTIONS), num_row, num_col))
 
-# 5x5マスにプロット
-for i in range(5):
-    for j in range(5):
-        plt.subplot(5,5,5*i+j+1)
-        plt.plot(v_array_trend[:,i,j])
-        plt.show()
+while(count< 10):
+    delta = 0
+    for i in range(num_row):
+        for j in range(num_col):
+            #print("delta %f" % delta)
+            for index, action in enumerate(ACTIONS):
+                q = Q[index, i,j]
+                agent.set_pos([i,j])
+                s = agent.get_pos()
+                tmp = 1.0 * agent.reward(s,action) 
+                print("tmp set: %f" % tmp)
+                agent.set_pos([i,j])
+                agent.move(action)
+                s_dash = agent.get_pos()
+                for index_dash, action_dash in enumerate(ACTIONS):
+                    tmp  += GAMMA * Q[index_dash, s_dash[0], s_dash[1]]
 
+                print("i: %d, j: %d, s:%s, a:%5s, s':%s, tmp:%f" %(i,j, str(s), action,  str(s_dash), tmp))
+                Q[index, s[0],s[1]] = tmp
+                delta = max(delta, abs(q - Q[index, s[0],s[1]]))
+                #print delta
+    #print("count: %d, delta: %f, abs: %f" % (count, delta, abs(v-V[i,j])))
+    count += 1
+    Q_trend[count,:, :,:] = Q
+    if delta < 1.E-5:
+        break
+    
+#print(Q)
+
+## Qの収束をプロット
+#for i in range(num_row):
+#    for j in range(num_col):
+#        plt.subplot(5,5, i*5+j+1)
+#        plt.plot(Q_trend[:count,0,i,j])
+#
+#plt.show()
 

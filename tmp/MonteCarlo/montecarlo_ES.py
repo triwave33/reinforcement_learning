@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 class Agent():
 
     ## クラス変数定義
+
     # アクションと移動を対応させる辞書 
     actions = ['right', 'up', 'left', 'down']
     act_dict = {'right':np.array([0,1]), 'up':np.array([-1,0]),\
@@ -25,7 +26,6 @@ class Agent():
         assert (array[0] >=0 and array[0] < 5 and \
                 array[1] >=0 and array[1] <5)
         self.pos = array
-        self.pi = np.zeros((5,5))) # 決定論的な方策 0に初期化
 
     # 現在位置を返す
     def get_pos(self):
@@ -83,9 +83,9 @@ class Agent():
         else:
             r = 0
         return r
-    
-    
-   
+
+
+
 # agentの生成
 agent = Agent([0,1])
 
@@ -93,54 +93,66 @@ GAMMA = 0.9
 ACTIONS = ['right', 'up', 'left', 'down']
 num_row = 5 
 num_col = 5
+num_iteration = 100 # エピソード終了までの反復回数
+num_episode = 10000 # MCサンプリング数
 
-# Vの初期化
-V = np.zeros((num_row, num_col))
+# Qの初期化
+V = np.zeros((5,5))
 
+# 方策の初期化
+pi = np.random.randint(0,4, size=(5,5))
+
+# 報酬を格納するリストの初期化
+returns = [[[[] for col in range(num_col)] for row in range(num_row)] for a in range(len(ACTIONS))]
 print("start iteration")
+
 
 count = 0
 
-N = 100
-V_trend = np.zeros((N, num_row, num_col))
-
-# policy evaluation
-while(True):
+for epi in range(num_episode):
+    print("episode#: %d" % epi)
     delta = 0
-    for i in range(num_row):
-        for j in range(num_col):
-            #print("delta %f" % delta)
-            v = V[i,j]
-            tmp = 0
-            for action in ACTIONS:
-                agent.set_pos([i,j])
-                s = agent.get_pos()
-                agent.move(action)
-                s_dash = agent.get_pos()
-                tmp += agent.pi(s, action) * 1.0 *\
-                        (agent.reward(s,action) + GAMMA * V[s_dash[0], s_dash[1]])
-                #print("i: %d, j: %d, s:%s, a:%5s, s';%s" %(i,j, str(s), action,  str(s_dash)))
-            V[i,j] = tmp
-            delta = max(delta, abs(v - V[i,j]))
+    i,j = np.random.randint(5, size=2)
+    first_action = np.random.randint(4)
+    agent.set_pos([i,j]) # 移動前の状態に初期化
+    tmp = 0
+    # 初回のアクション 
+    s = agent.get_pos()
+    agent.move(ACTIONS[first_action]) # 移動
+    reward = agent.reward(s, first_action)
+    tmp += reward # 移動後の報酬を加算
+
+    for k in range(1, num_iteration):
+        s = agent.get_pos()
+        action = pi[s[0],s[1]] 
+        agent.move(ACTIONS[action]) # 移動
+        reward = agent.reward(s, action)
+        tmp += GAMMA**(k) * reward # 移動後の報酬を加算
+        #print("i: %d, j: %d, s:%s, a:%5s, s';%s" %(i,j, str(s), action,  str(s_dash)))
+    returns[first_action][i][j].append(tmp)
     #print("count: %d, delta: %f, abs: %f" % (count, delta, abs(v-V[i,j])))
-    count += 1
-    V_trend[count, :,:] = V
-    if delta < 1.E-5:
-        break
 
-# policy improvement
-policy_stable = True
-for i in range(num_row):
-    for j in range(num_col):
-        b = pi()
+    
+    returns_average =np.array([[[np.mean(returns[a][c][r]) for r in range(num_row)] \
+                    for c in range(num_col)] for a in range(len(ACTIONS))])
+    # piを更新
+    pi = np.argmax(returns_average, axis=0)
+    print(pi)
 
-print(V)
 
-# Vの収束をプロット
-for i in range(num_row):
-    for j in range(num_col):
-        plt.subplot(5,5, i*5+j+1)
-        plt.plot(V_trend[:count,i,j])
+print("length of returns")
+returns_length =np.array([[[len(returns[a][c][r]) for r in range(num_row)] \
+                for c in range(num_col)] for a in range(len(ACTIONS))])
+print(returns_length)
 
-plt.show()
+print("average of returns")
+print(returns_average)
+
+## Vのヒストグラムをプロット
+#for i in range(num_row):
+#    for j in range(num_col):
+#        plt.subplot(5,5, i*5+j+1)
+#        plt.hist(returns[i][j])
+#
+#plt.show()
 

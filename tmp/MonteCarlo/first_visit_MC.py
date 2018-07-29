@@ -84,11 +84,6 @@ class Agent():
             r = 0
         return r
     
-    def pi(self, state, action):
-        # 変数としてstateを持っているが、実際にはstateには依存しない
-        return Agent.pi_dict1[action]
-    
-    #def transition(self, state, action, next_state)
     
    
 # agentの生成
@@ -98,9 +93,15 @@ GAMMA = 0.9
 ACTIONS = ['right', 'up', 'left', 'down']
 num_row = 5 
 num_col = 5
+num_iteration = 100 # エピソード終了までの反復回数
+num_episode = 10000 # MCサンプリング数
+# piの設定
 
 # Vの初期化
 V = np.zeros((5,5))
+
+# 報酬を格納するリストの初期化
+returns = [[[] for c in range(num_col)] for r in range(num_row)]
 
 print("start iteration")
 
@@ -109,36 +110,40 @@ count = 0
 N = 100
 V_trend = np.zeros((N, num_row, num_col))
 
-while(True):
+for epi in range(num_episode):
+    print("episode#: %d" % epi)
     delta = 0
-    for i in range(num_row):
-        for j in range(num_col):
-            #print("delta %f" % delta)
-            v = V[i,j]
-            tmp = 0
-            for action in ACTIONS:
-                agent.set_pos([i,j]) # 移動前の状態に初期化
-                s = agent.get_pos()
-                agent.move(action) # 移動
-                s_dash = agent.get_pos() # 移動後の状態
-                tmp += agent.pi(s, action) * 1.0 *\
-                        (agent.reward(s,action) + GAMMA * V[s_dash[0], s_dash[1]])
-                #print("i: %d, j: %d, s:%s, a:%5s, s';%s" %(i,j, str(s), action,  str(s_dash)))
-            V[i,j] = tmp
-            delta = max(delta, abs(v - V[i,j]))
+    i,j = np.random.randint(5, size=2)
+    agent.set_pos([i,j]) # 移動前の状態に初期化
+    tmp = 0
+    for k in range(num_iteration):
+        action = ACTIONS[np.random.randint(0,4)] # 上下左右がランダム
+        s = agent.get_pos()
+        agent.move(action) # 移動
+        s_dash = agent.get_pos() # 移動後の状態
+        reward = agent.reward(s, action)
+        tmp += GAMMA**(k) * reward # 移動後の報酬を加算
+        #print("i: %d, j: %d, s:%s, a:%5s, s';%s" %(i,j, str(s), action,  str(s_dash)))
+    returns[i][j].append(tmp) # indexに注意
     #print("count: %d, delta: %f, abs: %f" % (count, delta, abs(v-V[i,j])))
-    count += 1
-    V_trend[count, :,:] = V
-    if delta < 1.E-5:
-        break
     
 print(V)
 
-# Vの収束をプロット
+returns_length =np.array([[len(returns[r][c]) for c in range(num_col)] \
+                    for r in range(num_row)])
+print("length of returns")
+print returns_length
+
+returns_average =np.array([[np.mean(returns[r][c]) for c in range(num_col)] \
+                    for r in range(num_row)])
+print("average of returns")
+print(returns_average)
+
+# Vのヒストグラムをプロット
 for i in range(num_row):
     for j in range(num_col):
         plt.subplot(5,5, i*5+j+1)
-        plt.plot(V_trend[:count,i,j])
+        plt.hist(returns[i][j]) # index注意
 
 plt.show()
 
