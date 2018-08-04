@@ -1,6 +1,6 @@
 # reinforcement_learning
 
-日本語の説明は作成中。(Japanese descripsion is now being constructed...)
+(日本語による説明は一番下にあります)
 
 This repository is an archive of my learning for reinforcement learning according to a great book "Reinforce ment learning" by Sutton, S.S. and Andrew, G.B. (Japanese edition).
 
@@ -28,3 +28,25 @@ The essence is below.
 
 ## OpenAI Gym 
 - RL_8_cartpole_montecarlo.py: solvimg "CartPole" problem from OpenAI Gym environment (chapter 5.4)
+
+
+# 日本語による説明
+qiitaのサイトのコード置き場です。ファイル名の番号とqiitaの記事の番号が対応しています。
+
+[今さら聞けない強化学習（1）：状態価値関数とBellman方程式](https://qiita.com/triwave33/items/5e13e03d4d76b71bc802) 
+
+[今さら聞けない強化学習（2）：状態価値関数の実装](https://qiita.com/triwave33/items/3bad9f35d213a315ce78) 
+
+[今さら聞けない強化学習（3）：行動価値関数とBellman方程式](https://qiita.com/triwave33/items/8966890701169f8cad47) 
+
+[今さら聞けない強化学習（4）：行動価値関数の実装](https://qiita.com/triwave33/items/669a975b74461559addc) 
+
+[今さら聞けない強化学習（5）：状態価値関数近似と方策評価](https://qiita.com/triwave33/items/bed0fd7a2b56ee8e7c29) 
+
+[今さら聞けない強化学習（6）：反復法による最適方策](https://qiita.com/triwave33/items/59768d14da38f50fb76c) 
+
+[今さら聞けない強化学習（7）：モンテカルロ法で価値推定](https://qiita.com/triwave33/items/0c8833e6b899c26b208e) 
+
+[今さら聞けない強化学習(8): モンテカルロ法でOpenAI GymのCartpoleを学習](https://qiita.com/triwave33/items/1b9c87089b2fce0dd481) 
+
+
