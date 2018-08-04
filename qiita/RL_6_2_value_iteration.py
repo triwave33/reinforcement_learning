@@ -60,66 +60,7 @@ V_trend= V_trend[:count,:,:]
 
 
 ## 結果をグラフィカルに表示
-
-# 方策piから最適な行動を検索
-def if_true_color_red(val, else_color):
-    if val:
-        return 'r'
-    else:
-        return else_color
-max_color_k = np.vectorize(if_true_color_red)(pi,'k')
-max_color_w = np.vectorize(if_true_color_red)(pi,'w')
-
-
-# 最適行動を矢印で表示
-ax = plt.gca()
-plt.xlim(0,5)
-plt.ylim(0,5) 
-ax.xaxis.set_ticklabels([])
-ax.yaxis.set_ticklabels([])
-
-for i in range(5):
-    for j in range(5):
-        # rect
-        rect = plt.Rectangle(xy =(i,j) , width=1, height=1, fill=False)
-        ax.add_patch(rect)
-        # 座標のインデックスの調整
-        x = -j-1 
-        y = i
-        # arrow
-        if pi[x,y] ==0:
-            plt.arrow(i+ 0.5, j+0.5, 0.2, 0, width=0.01,head_width=0.15,\
-                head_length=0.2,color='r')
-        elif pi[x,y] ==1:
-            plt.arrow(i+ 0.5, j+0.5, 0, 0.2, width=0.01,head_width=0.15,\
-                head_length=0.2, color='r')
-        elif pi[x,y] ==2:
-            plt.arrow(i+ 0.5, j+0.5, -0.2, 0, width=0.01,head_width=0.15,\
-                head_length=0.2, color='r')
-        elif pi[x,y] ==3:
-            plt.arrow(i+ 0.5, j+0.5, 0, -0.2, width=0.01,head_width=0.15,\
-                head_length=0.2, color='r')
-plt.savefig('output_files/RL_6_2_opt_act.png')
-plt.close()
-
-# 状態価値関数を表示。状態関数は行動価値関数の行動に関しての期待をとる
-ax = plt.gca()
-plt.xlim(0,5)
-plt.ylim(0,5)
-ax.xaxis.set_ticklabels([])
-ax.yaxis.set_ticklabels([])
-V_round = np.round(V, decimals=2)
-for i in range(5):
-    for j in range(5):
-        # rect
-        rect = plt.Rectangle(xy =(i,j) , width=1, height=1, fill=False)
-        ax.add_patch(rect)
-        # 座標のインデックスの調整
-        x = -j-1 
-        y = i
-        # text
-        plt.text(i+ 0.4, j+0.5, "%s" % (str(V_round[x,y])))
-plt.savefig('output_files/RL_6_2_v_pi.png')
-plt.close()
-
-
+#方策を矢印で表示
+grid_world.pi_arrow_plot(pi)
+#状態価値関数を表示
+grid_world.V_value_plot(V)

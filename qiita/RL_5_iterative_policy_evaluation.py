@@ -2,6 +2,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import grid_world
+import plot_v_pi
 
 # agentの生成
 agent = grid_world.Agent([0,0])
@@ -52,3 +53,4 @@ for i in range(num_row):
 
 plt.show()
 
+plot_v_pi.plot(V, 'RL_5_v_pi.png')
