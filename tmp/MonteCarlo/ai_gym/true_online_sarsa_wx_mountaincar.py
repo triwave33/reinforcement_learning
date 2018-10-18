@@ -11,21 +11,23 @@ import seaborn as sns
 
 ACTIONS = [0,1,2]
 ALPHA =1.0E-8
-ALPHA_INI = 1.0E-2
+ALPHA_INI = 5.0E-1
 ALPHA_LAST = 0
 GAMMA = 0.9
-EPS_INI = 0.1
+EPS_INI = 0.3
 EPS_LAST = 0
-LAMBDA = 0.6
+LAMBDA = 0.5
 render = 0 # 描写モード
 ex_factor = 1.5 # epsilonがゼロになったあとも学習を続けるパラメータ
-sigma=0.3
+sigma=0.1
 use_potential_reward = False # 位置に応じた報酬
-use_binary_action = False # 左・右のみのアクション
-num_episode = 3000
+use_velosity_reward = False # 速度に応じた報酬
+use_binary_action = True # 左・右のみのアクション
+num_episode = 100
 
-N =4 # N分割
-
+N =17 # N分割
+meshgrid = 25
+grid_interval = 1
 
 # Ai GymのCartPoleを使用
 #game = 'CartPole-v0'
@@ -43,7 +45,6 @@ min_list = env.observation_space.low  # 下限値 [-1.2 -0.07]
 max_list = env.observation_space.high  # 上限値 [-0.6, 0.07]
 s1_space = np.linspace(min_list[0], max_list[0], N)
 s2_space = np.linspace(min_list[1], max_list[1], N)
-
 b = (N**num_state)
 num_x = num_state + num_action
 
@@ -158,9 +159,10 @@ for epi in range(int(num_episode*ex_factor)):
 
 
         if use_potential_reward:
-            reward = s_dash[0]**2
-            if s[0]>0:
-                reward*=2
+            reward += s_dash[0]**2 
+
+        if use_velosity_reward:
+            reward += s_dashp[1]**2
 
 
         a_dash = select_action(s_dash, theta, c, EPSILON,num_action, sigma)
@@ -198,16 +200,16 @@ for epi in range(int(num_episode*ex_factor)):
     memory = np.array(visit_list)
     
     print( theta)
-    print("epi: %d, eps: %f, alpha: %f, TDerr: %f  reward %f: " % (epi, EPSILON, ALPHA, DELTA, np.mean(reward_list)))
+    print("epi: %d, eps: %f, alpha: %f, TDerr: %f  reward %f: " % (epi, EPSILON, ALPHA, DELTA, tmp))
     print(action_result)
 
             
             
             
 
-    if ((epi %500 == 0) | ((epi <2000) & (epi %50==0))) :
-        x = np.linspace(min_list[0],max_list[0],50)
-        y = np.linspace(min_list[1],max_list[1],50)
+    if ((epi %500 == 0) | ((epi <2000) & (epi %grid_interval==0))) :
+        x = np.linspace(min_list[0],max_list[0],meshgrid)
+        y = np.linspace(min_list[1],max_list[1],meshgrid)
         X,Y = np.meshgrid(x,y)
 
         if (True):
@@ -216,21 +218,22 @@ for epi in range(int(num_episode*ex_factor)):
             plt.title('episode: %4d,   epsilon: %.3f,   alpha: %.3f,   average_reward: %3d' %(epi, EPSILON, ALPHA, np.mean(reward_list)))
 
             ax1 = fig.add_subplot(141, projection='3d')
-            #plt.gca().invert_zaxis()
+            plt.gca().invert_zaxis()
             ax1.plot_wireframe(X,Y,Z[0], rstride=1, cstride=1)
 
             ax2 = fig.add_subplot(142, projection='3d')
-            #plt.gca().invert_zaxis()
+            plt.gca().invert_zaxis()
             ax2.plot_wireframe(X,Y,Z[1], rstride=1, cstride=1)
             
             if use_binary_action != True:
                 ax3 = fig.add_subplot(143, projection='3d')
-                #plt.gca().invert_zaxis()
+                plt.gca().invert_zaxis()
                 ax3.plot_wireframe(X,Y,Z[2], rstride=1, cstride=1)
 
 
             ax4 = fig.add_subplot(144)
             sns.heatmap(np.argmax(Z, axis=0))
+            plt.gca().invert_yaxis()
         else:
             fig = plt.figure(figsize=(10,10))
 
@@ -245,9 +248,6 @@ for epi in range(int(num_episode*ex_factor)):
             Z = np.array([[Q_for_meshgrid(i,j,0,theta,c) for i in x] for j in y])
             ax1.plot_wireframe(X,Y,Z, rstride=2, cstride=2)
             
-
-
-
 
 
 
