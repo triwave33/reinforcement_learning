@@ -12,22 +12,22 @@ import seaborn as sns
 ACTIONS = [0,1,2]
 ALPHA =1.0E-8
 ALPHA_INI = 5.0E-1
-ALPHA_LAST = 0
+ALPHA_LAST = 0.0E-2
 GAMMA = 0.9
-EPS_INI = 0.3
+EPS_INI = 0.4
 EPS_LAST = 0
 LAMBDA = 0.5
 render = 0 # 描写モード
 ex_factor = 1.5 # epsilonがゼロになったあとも学習を続けるパラメータ
 sigma=0.1
-use_potential_reward = False # 位置に応じた報酬
-use_velosity_reward = False # 速度に応じた報酬
+use_potential_reward = True # 位置に応じた報酬
+use_velosity_reward = True # 速度に応じた報酬
 use_binary_action = True # 左・右のみのアクション
-num_episode = 100
+num_episode = 20000
 
-N =17 # N分割
+N =12 # N分割
 meshgrid = 25
-grid_interval = 1
+grid_interval = 500
 
 # Ai GymのCartPoleを使用
 #game = 'CartPole-v0'
@@ -68,11 +68,19 @@ print_log = False
 
 # 基底関数
 norm_factor = np.append(np.array([1.2, 0.07]), np.ones(num_action))
+norm_factor = norm_factor.reshape(len(norm_factor),1)
 
-def rbf(s,a, cb, sigma, num_action):
+def rbfs(s,a, c, sigma, num_action):
+    a = one_hot(a, num_action)
+    x = np.hstack([s,a])
+    x = x.reshape(len(x),1)
+    return np.exp(-np.square(LA.norm((c-x)/norm_factor, axis=0))/(2*sigma**2)) 
+
+def rbf_taihi(s,a, cb, sigma, num_action):
     a = one_hot(a, num_action)
     x = np.hstack([s,a])
     return np.exp(-np.square(LA.norm((x-cb)/norm_factor))/(2*sigma**2)) 
+
 
 np.savez('theta/constants',c=c, b=b, sigma=sigma, num_action=num_action, norm_factor=norm_factor)
 # 初期化
@@ -82,17 +90,21 @@ e = np.zeros(b)
 
 # Q
 def Q(s, a, theta,c,sigma,num_action):
+    return rbfs(s,a,c,sigma,num_action).dot(theta)
+
+def Q_taihi(s, a, theta,c,sigma,num_action):
     res =0
     for i in range(c.shape[1]):
         cb = c[:,i]
         res += theta[i] * rbf(s,a,cb,sigma,num_action)
     return res
 
+
 # Q
 def Q_for_meshgrid(s0,s1, a, theta,c,sigma):
     s = np.hstack([s0,s1])
-    rbfs = np.array([rbf(s,a,c[:,i],sigma,num_action) for i in range(c.shape[1])])
-    return theta.dot(rbfs)
+    x = rbfs(s,a,c,sigma,num_action)
+    return theta.dot(x)
 
 
 def one_hot(a, num_action):
@@ -140,7 +152,8 @@ for epi in range(int(num_episode*ex_factor)):
 
     tmp = 0 # 報酬積算用
     
-    x = np.array([rbf(s,a,c[:,i],sigma, num_action) for i in range(c.shape[1])])
+    #x = np.array([rbf(s,a,c[:,i],sigma, num_action) for i in range(c.shape[1])])
+    x = rbfs(s,a,c,sigma, num_action)
 
     count = 0
     Q_val_old = 0
@@ -160,15 +173,19 @@ for epi in range(int(num_episode*ex_factor)):
 
         if use_potential_reward:
             reward += s_dash[0]**2 
+            if s_dash[0] > 0:
+                reward *=2
 
         if use_velosity_reward:
-            reward += s_dashp[1]**2
+            reward += s_dash[1]**2
+
+        if done:
+            reward += 100
 
 
         a_dash = select_action(s_dash, theta, c, EPSILON,num_action, sigma)
         
-        x_dash = np.array([rbf(s_dash,a_dash,c[:,i],sigma,num_action) \
-                for i in range(c.shape[1])])
+        x_dash = rbfs(s_dash,a_dash,c,sigma,num_action)
 
         Q_val = theta.dot(x)
         Q_val_dash = theta.dot(x_dash)
@@ -207,7 +224,7 @@ for epi in range(int(num_episode*ex_factor)):
             
             
 
-    if ((epi %500 == 0) | ((epi <2000) & (epi %grid_interval==0))) :
+    if ((epi %grid_interval == 0) | ((epi <2000) & (epi %500==0))) :
         x = np.linspace(min_list[0],max_list[0],meshgrid)
         y = np.linspace(min_list[1],max_list[1],meshgrid)
         X,Y = np.meshgrid(x,y)
