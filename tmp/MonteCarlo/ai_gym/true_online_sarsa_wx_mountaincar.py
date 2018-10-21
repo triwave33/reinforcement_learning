@@ -8,24 +8,36 @@ from tqdm import tqdm
 import  gym
 import math
 import seaborn as sns
-
+import os
+import datetime
+import shutil
 ACTIONS = [0,1,2]
 ALPHA =1.0E-8
-ALPHA_INI = 5.0E-1
+ALPHA_INI = 1.0E-1
 ALPHA_LAST = 0.0E-2
-GAMMA = 0.9
-EPS_INI = 0.4
+GAMMA = 0.99
+EPS_INI = 0.0
 EPS_LAST = 0
-LAMBDA = 0.5
+LAMBDA = 0.0
 render = 0 # 描写モード
-ex_factor = 1.5 # epsilonがゼロになったあとも学習を続けるパラメータ
+ex_factor = 1.0 # epsilonがゼロになったあとも学習を続けるパラメータ
 sigma=0.1
-use_potential_reward = True # 位置に応じた報酬
-use_velosity_reward = True # 速度に応じた報酬
-use_binary_action = True # 左・右のみのアクション
-num_episode = 20000
+use_potential_reward = False # 位置に応じた報酬
+use_velosity_reward = False # 速度に応じた報酬
+use_binary_action = False # 左・右のみのアクション
+num_episode = 2001
 
-N =12 # N分割
+now = datetime.datetime.now().strftime('%Y%m%d%H%M')
+
+
+#path = './'
+path = '/volumes/data/dataset/ai_gym/'
+os.mkdir(path +now)
+os.mkdir(path +now + '/fig')
+os.mkdir(path +now + '/theta')
+myfile = os.path.dirname(os.path.abspath(__file__)) + '/true_online_sarsa_wx_mountaincar.py'
+shutil.copyfile(myfile, path +now + '/theta.setting.py')
+N =100 # N分割
 meshgrid = 25
 grid_interval = 500
 
@@ -82,7 +94,7 @@ def rbf_taihi(s,a, cb, sigma, num_action):
     return np.exp(-np.square(LA.norm((x-cb)/norm_factor))/(2*sigma**2)) 
 
 
-np.savez('theta/constants',c=c, b=b, sigma=sigma, num_action=num_action, norm_factor=norm_factor)
+np.savez(path + now + '/theta/constants',c=c, b=b, sigma=sigma, num_action=num_action, norm_factor=norm_factor)
 # 初期化
 theta = np.random.rand(b) # 初期化
 theta = np.zeros(b) # 初期化
@@ -180,7 +192,9 @@ for epi in range(int(num_episode*ex_factor)):
             reward += s_dash[1]**2
 
         if done:
-            reward += 100
+            if count < 199:
+                #reward += 100
+                print("succeed")
 
 
         a_dash = select_action(s_dash, theta, c, EPSILON,num_action, sigma)
@@ -259,7 +273,7 @@ for epi in range(int(num_episode*ex_factor)):
             ax1.set_ylabel('speed')
             ax1.set_zlabel('V')
 
-            ax1.set_title('episode: %4d,   epsilon: %.3f,   alpha: %.3f,   average_reward: %3d' %(epi, EPSILON, ALPHA, np.mean(reward_list)))
+            ax1.set_title('episode: %4d,   epsilon: %.3f,   alpha: %.3f,   average_reward: %3d' %(epi, EPSILON, ALPHA, np.mean(sssxweward_list)))
             #ax1.set_zlim(-40,0)
             #plt.gca().invert_zaxis()
             Z = np.array([[Q_for_meshgrid(i,j,0,theta,c) for i in x] for j in y])
@@ -268,11 +282,14 @@ for epi in range(int(num_episode*ex_factor)):
 
 
 
-        np.save('theta/mountaincar_Q_theta_%04d.npy' % (epi), theta)
-        plt.savefig('fig/mountaincar_Q_%04d.png' % (epi))
+        np.save(path + now +  '/theta/mountaincar_Q_theta_%04d.npy' % (epi), theta)
+        plt.savefig(path + now + '/fig/mountaincar_Q_%04d.png' % (epi))
         plt.close()
 
 
     env.close()
-plt.plot(reward_array)
-plt.show()
+
+plt.plot(reward_list)
+plt.savefig(path + now + '/fig/reward_list.png')
+plt.close()
+np.save(path + now + '/theta/reward_list', np.array(reward_list))
