@@ -10,6 +10,8 @@ from keras.models import Sequential, Model
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout
 from keras.layers.advanced_activations import LeakyReLU
 from keras.optimizers import Adam, SGD
+from keras import backend as K
+import tensorflow as tf
 import  gym
 import math
 import seaborn as sns
@@ -20,21 +22,22 @@ import sys
 
 
 ACTIONS = [0,1,2]
-ALPHA =1.0E-8
-ALPHA_INI = 2.E-1
-ALPHA_LAST = 0.0E-2
-GAMMA = 0.98
-EPS_INI = 0.0
+GAMMA = 0.99
+EPS_INI = 0.7
 EPS_LAST = 0
 LAMBDA = 0.6
 render = 0 # 描写モード
 ex_factor = 1.0 # epsilonがゼロになったあとも学習を続けるパラメータ
-sigma=0.1
-print(EPS_INI)
 use_potential_reward = False # 位置に応じた報酬
 use_velosity_reward = False # 速度に応じた報酬
 use_binary_action = False # 左・右のみのアクション
-num_episode = 301
+num_episode = 201
+num_memory = 10000
+num_batch = 32
+learning_rate = 1E-4
+h1 = 32
+h2 = 16
+
 
 now = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
 
@@ -53,11 +56,16 @@ grid_interval = 25
 # Ai GymのCartPoleを使用
 #game = 'CartPole-v0'
 game = 'MountainCar-v0'
-env = gym.make('MountainCar-v0')
+env = gym.make(game)
 lows = env.observation_space.low
 highs = env.observation_space.high
-num_state = 2
-num_action = 3
+if game == 'CartPole-v0':
+    num_state = 4
+    num_action = 2
+elif game == 'MountainCar-v0':
+    num_state = 2
+    num_action = 3
+
 if use_binary_action:
     num_action = 2
 select_num =0
@@ -71,6 +79,14 @@ num_x = num_state # 入力空間に行動は含まない
 
 print_log = False
 
+def huberloss(y_true, y_pred):
+    err = y_true - y_pred
+    cond = K.abs(err) < 1.0
+    L2 = 0.5 * K.square(err)
+    L1 = (K.abs(err) - 0.5)
+    loss = tf.where(cond, L2, L1)  # Keras does not cover where function in tensorflow :-(
+    return K.mean(loss)
+
 
 class NN():
     def __init__(self, lr, h1, h2, input_dim, output_dim):
@@ -81,10 +97,10 @@ class NN():
         self.output_dim = output_dim
         self.model = self.build_model()
 
-        optimizer = Adam(self.lr, 0.5)
+        optimizer = Adam(self.lr)
 
 
-        self.model.compile(loss= 'mse', optimizer=optimizer, metrics = ['accuracy'])
+        self.model.compile(loss= huberloss, optimizer=optimizer, metrics = ['accuracy'])
 
     
 
@@ -94,7 +110,7 @@ class NN():
         model.add(LeakyReLU(alpha=.2))
         model.add(Dense(self.h2))
         model.add(LeakyReLU(alpha=.2))
-        model.add(Dense(self.output_dim))
+        model.add(Dense(self.output_dim, activation='linear'))
 
         model.summary()
 
@@ -108,7 +124,8 @@ class NN():
 def select_action(s, model, eps, num_action):
     # e-greedyによる行動選択   
     if np.random.rand() > eps:
-        qs = [model.predict(np.hstack([s[0],one_hot(i, num_action)]).reshape(1,5)) for i in range(num_action)]
+        s = s.reshape(1,len(s))
+        qs = model.predict(s)
         action = np.argmax(qs)
         if print_log:
             print qs
@@ -132,13 +149,14 @@ a_list = []
 min_pos = min_list[0]
 max_pos = max_list[1]
 
-agent = NN(lr=1.E-4, h1=50, h2=20, input_dim=5, output_dim=1)
+
+agent = NN(lr=learning_rate, h1=h1, h2=h2, input_dim=num_state, output_dim=num_action)
 
 
 for epi in range(int(num_episode*ex_factor)):
     # greedy方策を徐々に確定的にしていく
-    EPSILON = max(EPS_LAST, EPS_INI* (1- epi*1./num_episode))
-    ALPHA = max(ALPHA_LAST, ALPHA_INI* (1- epi*1./num_episode))
+    #EPSILON = max(EPS_LAST, EPS_INI* (1- epi*1./num_episode))
+    EPSILON = 0.1 + 0.9 /(1.+epi)
     visit_list = []
     action_result = np.zeros(num_action)
     # エピソードを終端までプレイ
@@ -147,15 +165,13 @@ for epi in range(int(num_episode*ex_factor)):
 
     # initialize s
     s = env.reset() # 環境をリセット
-    if epi ==0:
-        s = np.array([-0.44982587,0.])  # 再現性をチェックする時用のシード
+    #if epi ==0:
+    #    s = np.array([-0.44982587,0.])  # 再現性をチェックする時用のシード
 
-    s = s.reshape(1,len(s))
     
     # e-greedyによる行動選択   
     a = select_action(s, agent.model, EPSILON, num_action)
 
-    x = np.hstack([s[0],one_hot(a,num_action)]).reshape(1,5)
 
     tmp = 0 # 報酬積算用
     
@@ -167,6 +183,11 @@ for epi in range(int(num_episode*ex_factor)):
 
     s_list_episode = []
     a_list_episode = []
+    count_list = []
+
+    episode_reward = 0  # 結果表示用の報酬
+
+    best_pos = 0
 
     while(done==False):
         if render:
@@ -176,62 +197,78 @@ for epi in range(int(num_episode*ex_factor)):
         a_list_episode.append(a)
         
 
-        # 行動aをとり、r, s'を観測
-        if use_binary_action:
-            s_dash, reward, done, info = env.step(a*2)
-        else:
-            s_dash, reward, done, info = env.step(a)
+        s_dash, reward, done, info = env.step(a)
+        reward = 0
 
-        s_dash = s_dash.reshape(1,len(s_dash))
+        if best_pos < s_dash[0]:
+            best_pos = s_dash[0]
 
-
-        if use_potential_reward:
-            reward += s_dash[0]**2 
-            if s_dash[0] > 0:
-                reward *=2
-
-        if use_velosity_reward:
-            reward += s_dash[1]**2
-
-        if done:
-            if count < 199:
-                #reward += 100
-                print("succeed")
-
+        if game=='CartPole-v0':
+            if done:
+                if count > 199:
+                    reward = 1
+                    print("succeed")
+                else:
+                    reward = -1
+        elif game == 'MountainCar-v0':
+            if done:
+                if count < 199:
+                    reward = 1
+                    print("succeed")
+                else:
+                    reward = -1
 
         a_dash = select_action(s_dash,agent.model,  EPSILON,num_action)
-        x_dash = np.hstack([s_dash[0],one_hot(a_dash,num_action)]).reshape(1,5)
+        visit_list.append([s,a,reward,s_dash,a_dash])
 
+
+        if len(visit_list) > num_memory:
+            visit_list = visit_list[-1*num_memory:,:]
+
+        if len(visit_list) < num_batch:
+            choice_len = len(visit_list)
+        else:
+            choice_len = num_batch
+
+        choice_index = np.random.choice(len(visit_list), choice_len)
+        mini_batch = [visit_list[i] for i in choice_index]
+
+        targets = np.zeros((choice_len,num_action))
+        inputs = np.zeros((choice_len,num_state))
+
+        for i, (s,a,r,ss,aa) in enumerate(mini_batch):
+            inputs[i,:] = s
+            Q_val_dash = np.max(agent.model.predict(ss.reshape((1,num_state)))[0])
+            targets[i] = agent.model.predict(s.reshape((1,num_state)))[0]
+
+            if done:
+                target = r
+            else:
+                target = r + GAMMA * Q_val_dash
+            targets[i,a] = target
         
 
-        Q_val = agent.model.predict(x)
-        Q_val_dash = agent.model.predict(x_dash)
-
-        loss = agent.model.train_on_batch(x, Q_val_dash)
-
+        loss = agent.model.train_on_batch(inputs ,targets)
 
         a = a_dash
         s = s_dash
-        x = x_dash
 
         action_result[a_dash] +=1
-        visit_list.append([s,a,reward,s_dash,a_dash])
 
 
 
         tmp += reward
         count +=1
+        episode_reward += 1
 
-    if count <200:
-        print("SUCEED")
-
+    count_list.append(count)
     reward_list.append(tmp)
     s_list.append(s_list_episode)
     a_list.append(a_list_episode)
     memory = np.array(visit_list)
     
     #print( theta_list)
-    print("epi: %d, eps: %f, reward: %f, loss: %e" % (epi, EPSILON, tmp, loss[0]))
+    print("epi: %d, eps: %f, t: %d, best_x: %.3f, reward: %.d, loss: %.e" % (epi, EPSILON,count, best_pos,  tmp, loss[0]))
     print(action_result)
 
             
@@ -242,28 +279,40 @@ for epi in range(int(num_episode*ex_factor)):
         x = np.linspace(min_list[0],max_list[0],meshgrid)
         y = np.linspace(min_list[1],max_list[1],meshgrid)
         X,Y = np.meshgrid(x,y)
-        Z = np.array([[[agent.model.predict(np.hstack([i,j,one_hot(k,num_action)]).reshape(1,5))[0][0] for i in x] for j in y] for k in range(num_action)])
+        if game=='CartPole-v0':
+            Z = np.array([[agent.model.predict(np.hstack([i,j,0,0]).\
+            reshape(1,num_state))[0] for i in x] for j in y])
+        elif game== 'MountainCar-v0':
+            Z = np.array([[agent.model.predict(np.hstack([i,j]).\
+            reshape(1,num_state))[0] for i in x] for j in y])
+
 
         if (True):
             fig = plt.figure(figsize=(40,10))
-            plt.title('episode: %4d,   epsilon: %.3f,   alpha: %.3f,   average_reward: %3d' %(epi, EPSILON, ALPHA, np.mean(reward_list)))
+            plt.title('episode: %4d,   epsilon: %.3f,   average_reward: %3d' %(epi, EPSILON,  np.mean(reward_list)))
 
-            ax1 = fig.add_subplot(141, projection='3d')
-            plt.gca().invert_zaxis()
-            ax1.plot_wireframe(X,Y,Z[0], rstride=1, cstride=1)
-
-            ax2 = fig.add_subplot(142, projection='3d')
-            plt.gca().invert_zaxis()
-            ax2.plot_wireframe(X,Y,Z[1], rstride=1, cstride=1)
-            
-            if use_binary_action != True:
-                ax3 = fig.add_subplot(143, projection='3d')
+            for i in range(num_action):
+                ax = fig.add_subplot(1,num_action+1,i+1, projection='3d')
                 plt.gca().invert_zaxis()
-                ax3.plot_wireframe(X,Y,Z[2], rstride=1, cstride=1)
+                ax.plot_wireframe(X,Y,Z[:,:,i], rstride=1, cstride=1)
+
+
+            #ax1 = fig.add_subplot(141, projection='3d')
+            #plt.gca().invert_zaxis()
+            #ax1.plot_wireframe(X,Y,Z[:,:,0], rstride=1, cstride=1)
+
+            #ax2 = fig.add_subplot(142, projection='3d')
+            #plt.gca().invert_zaxis()
+            #ax2.plot_wireframe(X,Y,Z[:,:,1], rstride=1, cstride=1)
+            #
+            #if use_binary_action != True:
+            #    ax3 = fig.add_subplot(143, projection='3d')
+            #    plt.gca().invert_zaxis()
+            #    ax3.plot_wireframe(X,Y,Z[:,:,2], rstride=1, cstride=1)
 
 
             ax4 = fig.add_subplot(144)
-            sns.heatmap(np.argmax(Z, axis=0))
+            sns.heatmap(np.argmax(Z, axis=2))
             plt.gca().invert_yaxis()
         else:
             fig = plt.figure(figsize=(10,10))
@@ -273,10 +322,10 @@ for epi in range(int(num_episode*ex_factor)):
             ax1.set_ylabel('speed')
             ax1.set_zlabel('V')
 
-            ax1.set_title('episode: %4d,   epsilon: %.3f,   alpha: %.3f,   average_reward: %3d' %(epi, EPSILON, ALPHA, np.mean(reward_list)))
+            ax1.set_title('episode: %4d,   epsilon: %.3f, average_reward: %3d' %(epi, EPSILON, np.mean(reward_list)))
             #ax1.set_zlim(-40,0)
             plt.gca().invert_zaxis()
-            ax1.plot_wireframe(X,Y,Z[2], rstride=1, cstride=1)
+            ax1.plot_wireframe(X,Y,Z[:,:,0], rstride=1, cstride=1)
             
 
 
