@@ -9,7 +9,7 @@ import keras
 from keras.models import Sequential, Model
 from keras.layers import Input, Dense, Reshape, Flatten, Dropout
 from keras.layers.advanced_activations import LeakyReLU
-from keras.optimizers import Adam, SGD
+from keras.optimizers import Adam, SGD, RMSprop
 from keras import backend as K
 import tensorflow as tf
 import  gym
@@ -19,31 +19,33 @@ import os
 import datetime
 import shutil
 import sys
+from ReplayBuffer import ReplayBuffer
 
 
 ACTIONS = [0,1,2]
 GAMMA = 0.99
-EPS_INI = 0.7
+EPS_INI = 1.0
 EPS_LAST = 0
 LAMBDA = 0.6
 render = 0 # 描写モード
+TAU =10
 ex_factor = 1.0 # epsilonがゼロになったあとも学習を続けるパラメータ
 use_potential_reward = False # 位置に応じた報酬
 use_velosity_reward = False # 速度に応じた報酬
 use_binary_action = False # 左・右のみのアクション
-num_episode = 201
+num_episode = 1501
 num_memory = 10000
-num_batch = 32
-learning_rate = 1E-4
-h1 = 32
-h2 = 16
+num_batch = 16
+learning_rate = 5E-3
+h1 = 16
+h2 = 8
 
 
 now = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
 
 
-path = './'
-#path = '/volumes/data/dataset/ai_gym/'
+#path = './'
+path = '/volumes/data/dataset/ai_gym/'
 os.mkdir(path +now)
 os.mkdir(path +now + '/fig')
 os.mkdir(path +now + '/theta')
@@ -54,7 +56,7 @@ meshgrid = 25
 grid_interval = 25
 
 # Ai GymのCartPoleを使用
-#game = 'CartPole-v0'
+game = 'CartPole-v0'
 game = 'MountainCar-v0'
 env = gym.make(game)
 lows = env.observation_space.low
@@ -97,7 +99,8 @@ class NN():
         self.output_dim = output_dim
         self.model = self.build_model()
 
-        optimizer = Adam(self.lr)
+        #optimizer = Adam(self.lr)
+        optimizer = RMSprop(self.lr)
 
 
         self.model.compile(loss= huberloss, optimizer=optimizer, metrics = ['accuracy'])
@@ -106,10 +109,8 @@ class NN():
 
     def build_model(self):
         model = Sequential()
-        model.add(Dense(self.h1, input_shape = self.input_dim))
-        model.add(LeakyReLU(alpha=.2))
-        model.add(Dense(self.h2))
-        model.add(LeakyReLU(alpha=.2))
+        model.add(Dense(self.h1, input_shape = self.input_dim, activation='relu'))
+        model.add(Dense(self.h2, activation='relu'))
         model.add(Dense(self.output_dim, activation='linear'))
 
         model.summary()
@@ -151,12 +152,21 @@ max_pos = max_list[1]
 
 
 agent = NN(lr=learning_rate, h1=h1, h2=h2, input_dim=num_state, output_dim=num_action)
+targetNN = NN(lr=learning_rate, h1=h1, h2=h2, input_dim=num_state, output_dim=num_action)
+
+buff = ReplayBuffer(num_memory)
 
 
+targetNN.model.set_weights(agent.model.get_weights())
+episode_reward_list =[]
+succeed_count = 0
+
+count = 0
 for epi in range(int(num_episode*ex_factor)):
     # greedy方策を徐々に確定的にしていく
-    #EPSILON = max(EPS_LAST, EPS_INI* (1- epi*1./num_episode))
-    EPSILON = 0.1 + 0.9 /(1.+epi)
+    EPSILON = max(EPS_LAST, EPS_INI* (1- epi*1./num_episode))
+    #EPSILON = 0.1 + 0.9 /(1.+epi)
+    #EPSILON = 0.1 + 0.9 /(1.+.1*epi)
     visit_list = []
     action_result = np.zeros(num_action)
     # エピソードを終端までプレイ
@@ -177,24 +187,22 @@ for epi in range(int(num_episode*ex_factor)):
     
     #x = np.array([rbf(s,a,c[:,i],sigma, num_action) for i in range(c.shape[1])])
 
-    count = 0
+    step_count = 0
     Q_val_old = 0
     z = np.zeros(b)
 
     s_list_episode = []
     a_list_episode = []
-    count_list = []
+    step_count_list = []
 
     episode_reward = 0  # 結果表示用の報酬
 
-    best_pos = 0
+    best_pos = -0.5
 
     while(done==False):
         if render:
             env.render()
 
-        s_list_episode.append(s)
-        a_list_episode.append(a)
         
 
         s_dash, reward, done, info = env.step(a)
@@ -205,71 +213,82 @@ for epi in range(int(num_episode*ex_factor)):
 
         if game=='CartPole-v0':
             if done:
-                if count > 199:
+                if step_count > 198:
                     reward = 1
                     print("succeed")
+                    succeed_count += 1
                 else:
                     reward = -1
         elif game == 'MountainCar-v0':
             if done:
-                if count < 199:
+                if step_count < 199:
                     reward = 1
                     print("succeed")
+                    succeed_count += 1
                 else:
                     reward = -1
 
         a_dash = select_action(s_dash,agent.model,  EPSILON,num_action)
         visit_list.append([s,a,reward,s_dash,a_dash])
 
+        buff.add(s,a,reward,s_dash,a_dash, done)
 
-        if len(visit_list) > num_memory:
-            visit_list = visit_list[-1*num_memory:,:]
 
-        if len(visit_list) < num_batch:
-            choice_len = len(visit_list)
-        else:
-            choice_len = num_batch
-
-        choice_index = np.random.choice(len(visit_list), choice_len)
-        mini_batch = [visit_list[i] for i in choice_index]
-
-        targets = np.zeros((choice_len,num_action))
-        inputs = np.zeros((choice_len,num_state))
-
-        for i, (s,a,r,ss,aa) in enumerate(mini_batch):
-            inputs[i,:] = s
-            Q_val_dash = np.max(agent.model.predict(ss.reshape((1,num_state)))[0])
-            targets[i] = agent.model.predict(s.reshape((1,num_state)))[0]
-
-            if done:
-                target = r
-            else:
-                target = r + GAMMA * Q_val_dash
-            targets[i,a] = target
         
+        batch = buff.getBatch(num_batch)
+        s_batch =  np.asarray([e[0] for e in batch])
+        a_batch =  np.asarray([e[1] for e in batch])
+        r_batch =  np.asarray([e[2] for e in batch])
+        s_dash_batch =  np.asarray([e[3] for e in batch])
+        a_dash_batch =  np.asarray([e[4] for e in batch])
+        done_batch =  np.asarray([e[5] for e in batch])
 
-        loss = agent.model.train_on_batch(inputs ,targets)
+        #for i, (s,a,r,ss,aa) in enumerate(mini_batch):
+        #    inputs[i,:] = s
+        #    Q_val_dash = np.max(targetNN.model.predict(ss.reshape((1,num_state)))[0])
+        #    targets[i] = agent.model.predict(s.reshape((1,num_state)))[0]
 
+        #    if done:
+        #        target = r
+        #    else:
+        #        target = r + GAMMA * Q_val_dash
+        #    targets[i,a] = target
+        
+        Q_val_dash = np.max(targetNN.model.predict(s_dash_batch), axis=1)
+        targets = agent.model.predict(s_batch)
+        target = r_batch + GAMMA * Q_val_dash * (done_batch -1.) * -1. # means r when done else r + GAMMA * Q'
+        for i, _a in enumerate(a_batch):
+            targets[i,_a] = target[i]
+
+
+        loss = agent.model.train_on_batch(s_batch ,targets)
+
+        a_list_episode.append(a)
+        s_list_episode.append(s)
         a = a_dash
         s = s_dash
 
         action_result[a_dash] +=1
 
-
-
         tmp += reward
-        count +=1
+        step_count +=1
         episode_reward += 1
 
-    count_list.append(count)
+    if epi %TAU ==0:
+        targetNN.model.set_weights(agent.model.get_weights())        
+        print("weight updated")
+    step_count_list.append(step_count)
     reward_list.append(tmp)
     s_list.append(s_list_episode)
     a_list.append(a_list_episode)
     memory = np.array(visit_list)
     
+    episode_reward_list.append(episode_reward)
     #print( theta_list)
-    print("epi: %d, eps: %f, t: %d, best_x: %.3f, reward: %.d, loss: %.e" % (epi, EPSILON,count, best_pos,  tmp, loss[0]))
-    print(action_result)
+    print("epi:%d, eps:%.2f, t:%d, x:%.2f, #:%d, r:%d, l: %.1e" % (epi, EPSILON,step_count, best_pos, succeed_count,  tmp, loss[0]))
+    #print(action_result)
+
+    count += 1
 
             
             
