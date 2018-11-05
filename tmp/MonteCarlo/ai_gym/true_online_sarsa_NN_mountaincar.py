@@ -25,31 +25,31 @@ from ReplayBuffer import ReplayBuffer
 ACTIONS = [0,1,2]
 GAMMA = 0.99
 EPS_INI = 1.0
-EPS_LAST = 0
+EPS_LAST = 0.1
 LAMBDA = 0.6
 render = 0 # 描写モード
-TAU =10
-ex_factor = 1.0 # epsilonがゼロになったあとも学習を続けるパラメータ
+TAU =5
+ex_factor = 2.0 # epsilonがゼロになったあとも学習を続けるパラメータ
 use_potential_reward = False # 位置に応じた報酬
 use_velosity_reward = False # 速度に応じた報酬
 use_binary_action = False # 左・右のみのアクション
 num_episode = 1501
 num_memory = 10000
 num_batch = 16
-learning_rate = 5E-3
-h1 = 16
-h2 = 8
+learning_rate = 5E-5
+h1 = 64
+h2 = 32
 
 
 now = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
 
 
-#path = './'
-path = '/volumes/data/dataset/ai_gym/'
+path = './'
+#path = '/volumes/data/dataset/ai_gym/'
 os.mkdir(path +now)
 os.mkdir(path +now + '/fig')
 os.mkdir(path +now + '/theta')
-myfile = os.path.dirname(os.path.abspath(__file__)) + '/true_online_sarsa_wx_mountaincar.py'
+myfile = os.path.dirname(os.path.abspath(__file__)) + '/true_online_sarsa_NN_mountaincar.py'
 shutil.copyfile(myfile, path +now + '/theta.setting.py')
 N =30 # N分割
 meshgrid = 25
@@ -152,6 +152,7 @@ max_pos = max_list[1]
 
 
 agent = NN(lr=learning_rate, h1=h1, h2=h2, input_dim=num_state, output_dim=num_action)
+#agent.model.load_weights('weights.h5')
 targetNN = NN(lr=learning_rate, h1=h1, h2=h2, input_dim=num_state, output_dim=num_action)
 
 buff = ReplayBuffer(num_memory)
@@ -361,6 +362,8 @@ plt.close()
 np.save(path + now + '/theta/reward_list' , np.array(reward_list))
 np.save(path + now + '/theta/s_list' , np.array(s_list))
 np.save(path + now + '/theta/a_list' , np.array(a_list))
+agent.model.save_weights(path + now + '/theta/weights.h5')
+agent.model.save(path + now + '/theta/model.h5')
 
 
 
