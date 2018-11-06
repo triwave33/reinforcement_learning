@@ -32,7 +32,7 @@ NONE_STATE = np.zeros(NUM_STATES)
 MIN_BATCH = 5
 LOSS_V = .5  # v loss coefficient
 LOSS_ENTROPY = .01  # entropy coefficient
-LEARNING_RATE = 5e-3
+LEARNING_RATE = 4e-5
 RMSPropDecay = 0.99
 
 # -- params of Advantage-ベルマン方程式
@@ -40,13 +40,13 @@ GAMMA = 0.99
 N_STEP_RETURN = 5
 GAMMA_N = GAMMA ** N_STEP_RETURN
 
-N_WORKERS = 8   # スレッドの数
+N_WORKERS = 7   # スレッドの数
 Tmax = 10   # 各スレッドの更新ステップ間隔
 
 # ε-greedyのパラメータ
 EPS_START = 0.9
-EPS_END = 0.1
-EPS_STEPS = 200*N_WORKERS
+EPS_END = 0.3
+EPS_STEPS = 400*N_WORKERS
 
 
 # --グローバルなTensorFlowのDeep Neural Networkのクラスです　-------
@@ -174,12 +174,10 @@ class Agent:
 
     def act(self, s):
         global eps
-        global count 
-        count += 1
-        if frames >= EPS_STEPS:   # ε-greedy法で行動を決定します 171115修正
+        if count >= EPS_STEPS:   # ε-greedy法で行動を決定します 171115修正
             eps = EPS_END
         else:
-            eps = EPS_START + count/20000000. * (EPS_END - EPS_START) / EPS_STEPS  # linearly interpolate
+            eps = EPS_START + count*1. * (EPS_END - EPS_START) / EPS_STEPS  # linearly interpolate
             #eps = EPS_START +  (EPS_END - EPS_START) / EPS_STEPS   # linearly interpolate
 
         if random.random() < eps:
@@ -244,6 +242,7 @@ class Environment:
         self.agent.brain.pull_parameter_server()  # ParameterSeverの重みを自身のLocalBrainにコピー
         global frames  # セッション全体での試行数、global変数を書き換える場合は、関数内でglobal宣言が必要です
         global isLearned
+        global count
 
         if (self.thread_type is 'test') and (self.count_trial_each_thread == 0):
             self.env.reset()
@@ -264,9 +263,11 @@ class Environment:
 
             r = 0
             if done:  # terminal state
+                count += 1
                 s_ = None
                 if step < 199:
                     r = +1
+                    print('SUCCEED')
                 else:
                     r = -1
 
@@ -285,7 +286,7 @@ class Environment:
                 self.count_trial_each_thread += 1  # このスレッドの総試行回数を増やす
                 break
         # 総試行数、スレッド名、今回の報酬を出力
-        print("#: " + str(frames) + ", eps: " + str(eps) + ", thread: "+self.name + ", epi :"+str(self.count_trial_each_thread) + ", r:" + str(step)+"、mean_r: "+str(self.total_reward_vec.mean()))
+        print("#: " + str(count) + ", eps: " + str(eps) + ", thread: "+self.name + ", epi :"+str(self.count_trial_each_thread) + ", r:" + str(step)+"、mean_r: "+str(self.total_reward_vec.mean()))
 
         # スレッドで平均報酬が一定を越えたら終了
         if self.total_reward_vec.mean() < 150:
