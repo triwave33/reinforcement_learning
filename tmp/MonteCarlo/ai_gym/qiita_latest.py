@@ -20,59 +20,56 @@ from keras.optimizers import Adam, SGD, RMSprop
 from keras import backend as K
 import tensorflow as tf
 
-############### 
-#true_online_sarsa_wx_mountaincar_2.py
-# 1との違い
-#1: 入力空間がSxA、出力がスカラ
-#2: 入力空間がS、出力がA
 
 # 学習用パラメータ
 ACTIONS = [0,1,2]
 GAMMA = 0.99
 EPS_LAST = 0
-render = 0 # 描写モード
+render = 0 # 描画モード
 num_episode = 1601
 
 # ファイル保存用パラメータ
+fileOut = False
 now = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
-#path = './'
-path = '/volumes/data/dataset/ai_gym/'
+path = './' # 保存先フォルダ(フォルダが自動生成される)
+#path = '/volumes/data/dataset/ai_gym/'
 os.mkdir(path +now)
 os.mkdir(path +now + '/fig')
 os.mkdir(path +now + '/theta')
 myfile = os.path.dirname(os.path.abspath(__file__)) + '/true_online_sarsa_wx_mountaincar.py'
 shutil.copyfile(myfile, path +now + '/theta.setting.py')
 
-# ファイル描画用パラメータ
+# 画像ファイル描画用パラメータ
 meshgrid = 25 # 描画のグリッド間隔（学習とは関係無い）
-grid_interval = 25 # 画像を保存する間隔
+rec_interval = 25 # 画像を保存するステップ間隔
 
+# Mountaincar
 game = 'MountainCar-v0'
 env = gym.make('MountainCar-v0')
 NUM_STATE = 2
 NUM_ACTION = 3
 
+
+
 class TableAgent:
-    
-    def __init__(self,N,alpha_ini,alpha_last,eps_ini,eps_last):    # Qの初期化
+    def __init__(self,N,alpha_ini,alpha_last,eps_ini,eps_last):    
         self.N = N # テーブルの分割数
-        self.done = False
-        self.Q = np.zeros(((NUM_ACTION,) + (self.N,)*NUM_STATE)) 
-        self.reward_array = []
-        self.min_list = np.array([-1.2, -0.07])  # 下限値
-        self.max_list = np.array([0.6,0.07])  # 上限値
-        self.alpha_ini = alpha_ini
+        self.done = False 
+        self.Q = np.zeros(((NUM_ACTION,) + (self.N,)*NUM_STATE))  
+        self.reward_array = [] 
+        self.min_list = np.array([-1.2, -0.07])  # グリッド分割下限値
+        self.max_list = np.array([0.6,0.07])  # グリッド分割上限値
+        self.alpha_ini = alpha_ini 
         self.alpha_last = alpha_last
         self.eps_ini = eps_ini
         self.eps_last = eps_last
  
-    def digitize(self,obs):
-        # 状態を離散化
+    def digitize(self,obs): # envからの観測値をを離散化
         s = [int(np.digitize(obs[i], np.linspace(self.min_list[i], \
                 self.max_list[i], self.N-1))) for i in range(NUM_STATE)]
         return s
 
-    def getQ(self,s,a):
+    def getQ(self,s,a): # s, aにおける行動価値関数を出力
         return self.Q[a,s[0],s[1]]
 
     def select_action(self, s, eps):
@@ -83,6 +80,7 @@ class TableAgent:
             return action
         else:
             action = np.argmax(self.Q[:,s[0],s[1]]) # greedy
+            # 最大値をとるアクションが複数ある場合、その中からランダムに選択
             is_greedy_index = np.where(self.Q[:,s[0],s[1]] == action)[0]
             if len(is_greedy_index) > 1:
                 action = np.random.choice(is_greedy_index)
@@ -95,7 +93,7 @@ class TableAgent:
         Qval_dash = self.getQ(s_dash,a_dash)
         self.Q[a,s[0],s[1]] = Qval + ALPHA * (reward + GAMMA * Qval_dash - Qval)
 
-    def draw_meshgrid(self):
+    def draw_meshgrid(self): # 画像保存の値を出力
         x = np.linspace(self.min_list[0],self.max_list[0],meshgrid)
         y = np.linspace(self.min_list[1],self.max_list[1],meshgrid)
         X,Y = np.meshgrid(x,y)
@@ -107,7 +105,7 @@ class LinearFuncAgent:
     # 基底関数
     min_list = env.observation_space.low  # 下限値 [-1.2 -0.07]
     max_list = env.observation_space.high  # 上限値 [-0.6, 0.07]
-    norm_factor = np.array([1.2, 0.07]) # スケールを調整ファクター
+    norm_factor = np.array([1.2, 0.07]) # 状態間のスケールを調整するをファクター
     norm_factor = norm_factor.reshape(len(norm_factor),1)
 
 
@@ -121,33 +119,34 @@ class LinearFuncAgent:
         self.eps_ini = eps_ini
         self.eps_last = eps_last
 
-        # 基底関数の定数項
-        ## 状態空間に等間隔配置する基底関数の中心µ
+        # 基底関数の定数項を初期化（学習対象外）
+        # 基底関数をガウス関数とし、中心値µを初期化
         self.mu_array = np.random.rand(NUM_STATE, b) # ランダムの場合
         #self.mu_array = np.zeros((NUM_STATE, b)) # オール0の場合
-        self.sigma=0.1
-   
         cnt =0
         for i in self.s1_space:
             for j in self.s2_space:
                 self.mu_array[0,cnt] =i
                 self.mu_array[1,cnt] =j
                 cnt+=1
+        # 分散を初期化（固定かつ共通）
+        self.sigma=0.1
 
         # 3つのアクションに対して、同じ基底関数セットを用いる
         self.mu_list = [np.copy(self.mu_array)] * NUM_ACTION
         
-        # パラメータの初期化
+        # 学習対象のパラメータの初期化
         self.theta_list = [np.zeros(b), np.zeros(b), np.zeros(b)]
 
 
-    # 全ての基底関数に対してxを入力し値を配列で返す
+    # 基底関数(入力:状態空間(2次元)、出力:基底関数の出力(b*3次元))
     def rbfs(self, s):
         s = s.reshape(len(s),1) # 2次元に整形
         return np.exp(-np.square(LA.norm((self.mu_list-s)/self.norm_factor, axis=1))/(2*self.sigma**2)) 
 
         
     def getQ(self, s, a):
+        # Q = X.T.dot(Theta)
         return (self.rbfs(s)[a]).dot(self.theta_list[a])
 
 
@@ -159,20 +158,20 @@ class LinearFuncAgent:
         else:
             qs = [self.getQ(s,i) for i in range(NUM_ACTION)]
             action = np.argmax(qs)
+            # 最大値をとる行動が複数ある場合はさらにランダムに選択
             is_greedy_index = np.where(qs == action)[0]
             if len(is_greedy_index) > 1:
                 action = np.random.choice(is_greedy_index)
             return action
 
-
     def train(self, s, a, reward, s_dash, a_dash):
-        x = self.rbfs(s)
+        X = self.rbfs(s)
         Q_val = self.getQ(s,a)
         Q_val_dash = self.getQ(s_dash,a_dash)
 
         DELTA = reward + GAMMA*Q_val_dash - Q_val
-        self.theta_list[a] = self.theta_list[a] + ALPHA * DELTA * x[a]
-
+        # パラメータの更新
+        self.theta_list[a] = self.theta_list[a] + ALPHA * DELTA * X[a]
 
     def draw_meshgrid(self):
         x = np.linspace(self.min_list[0],self.max_list[0],meshgrid)
@@ -190,21 +189,23 @@ class DqnAgent:
     num_memory = 10000
     min_list = env.observation_space.low  # 下限値 [-1.2 -0.07]
     max_list = env.observation_space.high  # 上限値 [-0.6, 0.07]
-    TAU = 5
 
-    def __init__(self, lr, h1, h2, in_dim, out_dim, eps_ini, eps_last):
+    def __init__(self, lr, h1, h2, TAU, num_memory, in_dim, out_dim, eps_ini, eps_last):
         self.done = False
-        self.lr = lr
-        self.h1 = h1
-        self.h2 = h2
-        self.in_dim = (in_dim,)
-        self.out_dim = out_dim
+        self.lr = lr    # learning rate
+        self.h1 = h1    # 1st hidden layer
+        self.h2 = h2    # 2nd hidden layer
+        self.TAU = TAU
+        self.in_dim = (in_dim,) # NNモデル生成のために入力変数を指定
+        self.out_dim = out_dim  # NNモデル生成のために出力変数を指定 
         self.eps_ini = eps_ini
         self.eps_last = eps_last
-        self.model = self.build_model()
-        self.alpha_ini = 0 # dummy
+        self.alpha_ini = 0 # dummy # 他のクラスとの共通化のためダミー
         self.alpha_last = 0 # dummy
         self.buff = ReplayBuffer(self.num_memory)
+        self.model = self.build_model() # モデルを生成
+        self.targetModel = self.build_model()
+        self.targetModel.set_weights(self.model.get_weights())
         
         optimizer = RMSprop(self.lr)
         
@@ -227,7 +228,7 @@ class DqnAgent:
         return model
 
     def getQ(self, s, a):
-        s = s.reshape(1, len(s))
+        s = s.reshape(1, len(s)) # 2次元配列に整形
         q = self.model.predict(s)
         return self.model.predict(s)[0][a]
 
@@ -237,7 +238,7 @@ class DqnAgent:
             action = np.random.randint(NUM_ACTION)
             return action
         else:
-            qs = [self.getQ(s,i) for i in range(NUM_ACTION)]
+            qs = self.model.predict(s.reshape(1,len(s)))[0]
             action = np.argmax(qs)
             is_greedy_index = np.where(qs == action)[0]
             if len(is_greedy_index) > 1:
@@ -267,6 +268,9 @@ class DqnAgent:
         for i, _a in enumerate(a_batch):
             targets[i,_a] = target[i]
         self.model.train_on_batch(s_batch, targets)
+
+    def syncModel(self):
+        self.targetModel.set_weights(self.model.get_weights())
 
 
     def draw_meshgrid(self):
@@ -321,17 +325,22 @@ class ReplayBuffer(object):
 #                        eps_ini=0, eps_last=0)
 #agent = TableAgent(N=30, alpha_ini=0.5, alpha_last=0, \
 #                        eps_ini=0, eps_last=0)
-agent = DqnAgent(lr=1.E-4, h1=32, h2=16, in_dim=NUM_STATE, out_dim=NUM_ACTION, eps_ini=0, eps_last=0)
+agent = DqnAgent(lr=1.E-4, h1=320, h2=160, TAU=5, num_memory = 10000, in_dim=NUM_STATE, out_dim=NUM_ACTION, eps_ini=0, eps_last=0)
 
 reward_list = []
 
 for epi in range(int(num_episode)):
     
    
-    visit_list = []
     action_result = np.zeros(NUM_ACTION)
     tmp = 0 # 報酬積算用
     count = 0
+
+    if agent.__class__.__name__ == 'DqnAgent':
+        if epi % agent.TAU == 0:
+            agent.syncModel()
+            print("targetNN sync!!")
+
 
     # greedy方策を徐々に確定的にしていく
     EPSILON = max(agent.eps_last, agent.eps_ini* (1- epi*1./num_episode))
@@ -349,29 +358,27 @@ for epi in range(int(num_episode)):
         if render:
             env.render()
 
-
         # 行動aをとり、r, s'を観測
         s_dash, reward, done, info = env.step(a)
         agent.done = done
+        # s'からe-greedyにより次の行動を決定
         a_dash = agent.select_action(s_dash,EPSILON)
-        
+        # 価値（パラメータ）の更新
         agent.train(s,a,reward,s_dash,a_dash)
 
         if agent.done:
             if count < 199:
-                print("succeed")
+                print("SUCEED!!")
 
         a = a_dash
         s = s_dash
 
         action_result[a_dash] +=1
-        visit_list.append([s,a,reward,s_dash,a_dash])
         tmp += reward
         count +=1
 
 
     reward_list.append(tmp)
-    memory = np.array(visit_list)
     
     #print( agent.theta_list)
     print("epi: %d, eps: %.3f, alpha: %.3f, reward %d: " % (epi, EPSILON, ALPHA, tmp))
@@ -379,13 +386,8 @@ for epi in range(int(num_episode)):
 
             
             
-            
 
-    if ((epi %grid_interval == 0) | ((epi <2000) & (epi %500==0))) :
-        #x = np.linspace(min_list[0],max_list[0],meshgrid)
-        #y = np.linspace(min_list[1],max_list[1],meshgrid)
-        #X,Y = np.meshgrid(x,y)
-        #Z = np.array([[[agent.getQ(np.array([i,j]),k) for i in x] for j in y] for k in range(NUM_ACTION)])
+    if (fileOut & (epi %rec_interval == 0)) :
         X,Y,Z = agent.draw_meshgrid()
 
         if (True):
@@ -417,14 +419,9 @@ for epi in range(int(num_episode)):
             ax1.set_zlabel('V')
 
             ax1.set_title('episode: %4d,   epsilon: %.3f,   alpha: %.3f,   average_reward: %3d' %(epi, EPSILON, ALPHA, np.mean(reward_list)))
-            #ax1.set_zlim(-40,0)
             plt.gca().invert_zaxis()
             ax1.plot_wireframe(X,Y,Z[2], rstride=1, cstride=1)
             
-
-
-
-        #np.save(path + now +  '/theta/mountaincar_Q_theta_%04d.npy' % (epi), np.array(agent.theta_list))
         plt.savefig(path + now + '/fig/mountaincar_Q_%04d.png' % (epi))
         plt.close()
 
@@ -434,7 +431,3 @@ env.close()
 plt.plot(reward_list)
 plt.savefig(path + now + '/fig/reward_list.png')
 plt.close()
-np.save(path + now + '/theta/result.npy' , np.array(result))
-np.save(path + now + '/theta/reward_list' , np.array(reward_list))
-np.save(path + now + '/theta/s_list' , np.array(s_list))
-np.save(path + now + '/theta/a_list' , np.array(a_list))
