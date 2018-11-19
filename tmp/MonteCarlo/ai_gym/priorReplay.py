@@ -6,7 +6,7 @@ import numpy as np
 import time
 from keras.models import Sequential
 from keras.layers import Dense
-from keras.optimizers import Adam
+from keras.optimizers import Adam,RMSprop
 from keras.utils import plot_model
 from collections import deque
 from gym import wrappers  # gymの画像保存
@@ -15,7 +15,7 @@ import tensorflow as tf
 
 # [4] メイン関数開始----------------------------------------------------
 # [4.1] 初期設定--------------------------------------------------------
-DQN_MODE = 1  # 1がDQN、0がDDQNです
+DQN_MODE = 0  # 1がDQN、0がDDQNです
 LENDER_MODE = 1  # 0は学習後も描画なし、1は学習終了後に描画する
 game = 'CartPole-v0'
 game = 'MountainCar-v0'
@@ -31,11 +31,11 @@ GAMMA = 0.99  # 割引係数
 islearned = 0  # 学習が終わったフラグ
 isrender = 0  # 描画フラグ
 # ---
-hidden_size = 16  # Q-networkの隠れ層のニューロンの数
-learning_rate = 0.0005  # Q-networkの学習係数
-memory_size = 10000  # バッファーメモリの大きさ
+hidden_size = 32  # Q-networkの隠れ層のニューロンの数
+learning_rate = 0.0001  # Q-networkの学習係数
+memory_size = 100000  # バッファーメモリの大きさ
 batch_size = 32  # Q-networkを更新するバッチの大記載
-per_wait = 100
+per_wait = 10000
 
 
 
@@ -55,9 +55,9 @@ class QNetwork:
     def __init__(self, learning_rate=0.01, state_size=NUM_STATE, action_size=NUM_ACTION, hidden_size=10):
         self.model = Sequential()
         self.model.add(Dense(hidden_size, activation='relu', input_dim=state_size))
-        self.model.add(Dense(hidden_size, activation='relu'))
+        self.model.add(Dense(hidden_size/2, activation='relu'))
         self.model.add(Dense(action_size, activation='linear'))
-        self.optimizer = Adam(lr=learning_rate)  # 誤差を減らす学習方法はAdamとし、勾配は最大1にクリップする
+        self.optimizer = RMSprop(lr=learning_rate)  # 誤差を減らす学習方法はAdamとし、勾配は最大1にクリップする
         # self.model.compile(loss='mse', optimizer=self.optimizer)
         self.model.compile(loss=huberloss, optimizer=self.optimizer)
 
@@ -126,13 +126,16 @@ class QNetwork:
         s_dash_batch =  np.asarray([e[3] for e in batch_memory.buffer])[:,0,:]
         done_batch =  np.asarray([e[4] for e in batch_memory.buffer])
  
-        Q_val_dash = np.max(self.model.predict(s_dash_batch), axis=1)
-        targets = self.model.predict(s_batch)
+        
+        next_action_batch = np.argmax(mainQN.model.predict(s_dash_batch), axis=1)
+        Q_val_dash = targetQN.model.predict(s_dash_batch)
+        Q_val_dash = np.array([q[a] for q,a in zip(Q_val_dash,next_action_batch)])
         target = r_batch + GAMMA * Q_val_dash * (done_batch -1.) * -1. # means r when done else r + GAMMA * Q'
+        targets = mainQN.model.predict(s_batch)
+        targets = np.array([q[a] for q,a in zip(targets, a_batch)])
 
-        for i, _a in enumerate(a_batch):
-            targets[i,_a] = target[i]
         self.model.train_on_batch(s_batch, targets)
+
 
 
         #for i, (state_b, action_b, reward_b, next_state_b, done) in enumerate(batch_memory.buffer):
@@ -184,20 +187,46 @@ class Memory_TDerror(Memory):
 
     # TD誤差をすべて更新
     def update_TDerror(self, memory, GAMMA, mainQN, targetQN):
-        for i in range(0, (self.len() - 1)):
-            (state, action, reward, next_state, done) = memory.buffer[i]  # 最新の状態データを取り出す
-            # 価値計算（DDQNにも対応できるように、行動決定のQネットワークと価値観数のQネットワークは分離）
-            next_action = np.argmax(mainQN.model.predict(next_state)[0])  # 最大の報酬を返す行動を選択する
-            target = reward + GAMMA * targetQN.model.predict(next_state)[0][next_action]
-            TDerror = target - targetQN.model.predict(state)[0][action]
-            self.buffer[i] = TDerror
+        
+        s_batch =  np.asarray([e[0] for e in memory.buffer])[:,0,:]
+        a_batch =  np.asarray([e[1] for e in memory.buffer])
+        r_batch =  np.asarray([e[2] for e in memory.buffer])
+        s_dash_batch =  np.asarray([e[3] for e in memory.buffer])[:,0,:]
+        done_batch =  np.asarray([e[4] for e in memory.buffer])
+ 
+        next_action_batch = np.argmax(mainQN.model.predict(s_dash_batch), axis=1)
+        
+        Q_val_dash = targetQN.model.predict(s_dash_batch)
+        Q_val_dash = np.array([q[a] for q,a in zip(Q_val_dash,next_action_batch)])
+        target = r_batch + GAMMA * Q_val_dash * (done_batch -1.) * -1. # means r when done else r + GAMMA * Q'
+        targets = mainQN.model.predict(s_batch)
+        targets = np.array([q[a] for q,a in zip(targets, a_batch)])
+
+        #TDerror = target -  targetQN.model.predict(s_batch)[a_batch]
+        TDerror = target -  targets
+
+        for i in range(len(TDerror)):
+            self.buffer[i] = TDerror[i]
+
+
+
+        #for i in range(0, (self.len() - 1)):
+        #    (state, action, reward, next_state, done) = memory.buffer[i]  # 最新の状態データを取り出す
+        #    # 価値計算（DDQNにも対応できるように、行動決定のQネットワークと価値観数のQネットワークは分離）
+        #    next_action = np.argmax(mainQN.model.predict(next_state)[0])  # 最大の報酬を返す行動を選択する
+        #    target = reward + GAMMA * targetQN.model.predict(next_state)[0][next_action]
+        #    TDerror = target - targetQN.model.predict(state)[0][action]
+        #    self.buffer[i] = TDerror
 
     # TD誤差の絶対値和を取得
     def get_sum_absolute_TDerror(self):
+        #sum_absolute_TDerror = np.sum(abs(np.array(self.buffer)) + 0.0001)
         sum_absolute_TDerror = 0
+        #print(sum_absolute_TDerror)
         for i in range(0, (self.len() - 1)):
             sum_absolute_TDerror += abs(self.buffer[i]) + 0.0001  # 最新の状態データを取り出す
 
+        #print(sum_absolute_TDerror)
         return sum_absolute_TDerror
 
 
@@ -205,14 +234,14 @@ class Memory_TDerror(Memory):
 class Actor:
     def get_action(self, state, episode, targetQN):  # [C]ｔ＋１での行動を返す
         # 徐々に最適行動のみをとる、ε-greedy法
-        epsilon = 0.001 + 0.9 / (1.0 + episode)
+        epsilon = 0 # 0.001 + 0.9 / (1.0 + episode)
 
         if epsilon <= np.random.uniform(0, 1):
             retTargetQs = targetQN.model.predict(state)[0]
             action = np.argmax(retTargetQs)  # 最大の報酬を返す行動を選択する
 
         else:
-            action = np.random.choice([0, 1])  # ランダムに行動する
+            action = np.random.choice([0, NUM_ACTION-1])  # ランダムに行動する
 
         return action
 
@@ -249,6 +278,7 @@ for episode in range(num_episodes):  # 試行数分繰り返す
             if t < 198:
                 if game == 'MountainCar-v0':
                     reward = +1  # 報酬クリッピング、報酬は1, 0, -1に固定
+                    print("SUCCESS")
                 else:
                     reward = -1  # 報酬クリッピング、報酬は1, 0, -1に固定
             else:
@@ -256,6 +286,7 @@ for episode in range(num_episodes):  # 試行数分繰り返す
                     reward = -1  # 立ったまま195step超えて終了時は報酬
                 else:
                     reward = +1  # 立ったまま195step超えて終了時は報酬
+                    print("SUCCESS")
         else:
             reward = 0  # 各ステップで立ってたら報酬追加（はじめからrewardに1が入っているが、明示的に表す）
 
