@@ -35,7 +35,7 @@ hidden_size = 32  # Q-networkの隠れ層のニューロンの数
 learning_rate = 0.0001  # Q-networkの学習係数
 memory_size = 100000  # バッファーメモリの大きさ
 batch_size = 32  # Q-networkを更新するバッチの大記載
-per_wait = 10000
+per_wait = 100
 
 
 
@@ -81,20 +81,6 @@ class QNetwork:
             targets[i,_a] = target[i]
         self.model.train_on_batch(s_batch, targets)
 
-        #for i, (state_b, action_b, reward_b, next_state_b) in enumerate(mini_batch):
-        #    inputs[i:i + 1] = state_b
-        #    target = reward_b
-
-        #    if not (next_state_b == np.zeros(state_b.shape)).all(axis=1):
-        #        # 価値計算（DDQNにも対応できるように、行動決定のQネットワークと価値観数のQネットワークは分離）
-        #        retmainQs = self.model.predict(next_state_b)[0]
-        #        next_action = np.argmax(retmainQs)  # 最大の報酬を返す行動を選択する
-        #        target = reward_b + gamma * targetQN.model.predict(next_state_b)[0][next_action]
-
-        #    targets[i] = self.model.predict(state_b)  # Qネットワークの出力
-        #    targets[i][action_b] = target  # 教師信号
-        #    self.model.fit(inputs, targets, epochs=1, verbose=0)  # epochsは訓練データの反復回数、verbose=0は表示なしの設定
-
 
     # [※p1] 優先順位付き経験再生で重みの学習
     def pioritized_experience_replay(self, memory, batch_size, GAMMA, targetQN, memory_TDerror):
@@ -136,21 +122,6 @@ class QNetwork:
 
         self.model.train_on_batch(s_batch, targets)
 
-
-
-        #for i, (state_b, action_b, reward_b, next_state_b, done) in enumerate(batch_memory.buffer):
-        #    inputs[i:i + 1] = state_b
-        #    target = reward_b
-
-        #    if not (next_state_b == np.zeros(state_b.shape)).all(axis=1):
-        #        # 価値計算（DDQNにも対応できるように、行動決定のQネットワークと価値観数のQネットワークは分離）
-        #        retmainQs = self.model.predict(next_state_b)[0]
-        #        next_action = np.argmax(retmainQs)  # 最大の報酬を返す行動を選択する
-        #        target = reward_b + GAMMA * targetQN.model.predict(next_state_b)[0][next_action]
-
-        #    targets[i] = self.model.predict(state_b)  # Qネットワークの出力
-        #    targets[i][action_b] = target  # 教師信号
-        #    self.model.fit(inputs, targets, epochs=1, verbose=0)  # epochsは訓練データの反復回数、verbose=0は表示なしの設定
 
 
 # [2]Experience ReplayとFixed Target Q-Networkを実現するメモリクラス
@@ -209,15 +180,6 @@ class Memory_TDerror(Memory):
             self.buffer[i] = TDerror[i]
 
 
-
-        #for i in range(0, (self.len() - 1)):
-        #    (state, action, reward, next_state, done) = memory.buffer[i]  # 最新の状態データを取り出す
-        #    # 価値計算（DDQNにも対応できるように、行動決定のQネットワークと価値観数のQネットワークは分離）
-        #    next_action = np.argmax(mainQN.model.predict(next_state)[0])  # 最大の報酬を返す行動を選択する
-        #    target = reward + GAMMA * targetQN.model.predict(next_state)[0][next_action]
-        #    TDerror = target - targetQN.model.predict(state)[0][action]
-        #    self.buffer[i] = TDerror
-
     # TD誤差の絶対値和を取得
     def get_sum_absolute_TDerror(self):
         #sum_absolute_TDerror = np.sum(abs(np.array(self.buffer)) + 0.0001)
@@ -255,8 +217,15 @@ memory_TDerror = Memory_TDerror(max_size=memory_size)
 
 actor = Actor()
 
+time_list = []
+reward_list = []
+end_time = time.time()
+
 # [4.3]メインルーチン--------------------------------------------------------
 for episode in range(num_episodes):  # 試行数分繰り返す
+
+    start_time = time.time()
+
     env.reset()  # cartPoleの環境初期化
     state, reward, done, _ = env.step(env.action_space.sample())  # 1step目は適当な行動をとる
     state = np.reshape(state, [1, NUM_STATE])  # list型のstateを、1行4列の行列に変換
@@ -320,6 +289,10 @@ for episode in range(num_episodes):  # 試行数分繰り返す
             total_reward_vec = np.hstack((total_reward_vec[1:], episode_reward))  # 報酬を記録
             print('%d Episode finished after %f time steps / mean %f' % (episode, t + 1, total_reward_vec.mean()))
             break
+
+    end_time = time.time()
+    time_list.append((end_time - start_time))
+    reward_list.append(episode_reward)
 
     ## 複数施行の平均報酬で終了を判断
     #if total_reward_vec.mean() <= goal_average_reward:
