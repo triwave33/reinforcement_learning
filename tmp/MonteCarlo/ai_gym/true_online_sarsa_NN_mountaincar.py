@@ -141,7 +141,7 @@ def one_hot(a, num_action):
 upsampling = 1
 
 
-def main(TAU, num_memory, loss, num=0):
+def main(TAU, num_memory, loss, use_clip_reward, num=0):
     #for epi in tqdm(range(int(num_episode*ex_factor))):
     reward_list = []
     s_list = []
@@ -150,8 +150,8 @@ def main(TAU, num_memory, loss, num=0):
     max_pos = max_list[1]
     
     now = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
-    #path = './'
-    path = '/volumes/data/dataset/ai_gym/'
+    path = './'
+    #path = '/volumes/data/dataset/ai_gym/'
     os.mkdir(path +now)
     os.mkdir(path +now + '/fig')
     os.mkdir(path +now + '/theta')
@@ -216,27 +216,27 @@ def main(TAU, num_memory, loss, num=0):
             
     
             s_dash, reward, done, info = env.step(a)
-            reward = 0
     
             if best_pos < s_dash[0]:
                 best_pos = s_dash[0]
     
-            if game=='CartPole-v0':
+            if use_clip_reward:
+                reward = 0
                 if done:
-                    if step_count > 198:
-                        reward = 1
-                        print("succeed")
-                        succeed_count += 1
-                    else:
-                        reward = -1
-            elif game == 'MountainCar-v0':
-                if done:
-                    if step_count < 199:
-                        reward = 1
-                        print("succeed")
-                        succeed_count += 1
-                    else:
-                        reward = -1
+                    if game=='CartPole-v0':
+                        if step_count > 198:
+                            reward = 1
+                            print("succeed")
+                            succeed_count += 1
+                        else:
+                            reward = -1
+                    elif game == 'MountainCar-v0':
+                        if step_count < 199:
+                            reward = 1
+                            print("succeed")
+                            succeed_count += 1
+                        else:
+                            reward = -1
     
             a_dash = select_action(s_dash,agent.model,  EPSILON,num_action)
             visit_list.append([s,a,reward,s_dash,a_dash])
@@ -381,38 +381,44 @@ def main(TAU, num_memory, loss, num=0):
 # 1 pure NN
 res1 = []
 for i in range(5):
-    res1.append(main(TAU=1, num_memory=1, loss='mse',num=i))
+    res1.append(main(TAU=1, num_memory=1, loss='mse', use_clip_reward=False, num=i))
 
 
-# 2 pure NN + huberloss
+# 2 pure NN + cr + huberloss
 res2 = []
 for i in range(5):
-    res2.append(main(TAU=1, num_memory=1, loss='huberloss',num=i))
+    res2.append(main(TAU=1, num_memory=1, loss='huberloss', use_clip_reward=True, num=i))
 
 
-# 3 pure NN + huberloss + er
-res3 = []
-for i in range(5):
-    res3.append(main(TAU=1, num_memory=100, loss='huberloss',num=i))
-
-
-# 4 pure NN + huberloss + er
-res4 = []
-for i in range(5):
-    res4.append(main(TAU=1, num_memory=10000, loss='huberloss',num=i))
-
-
-# 5 pure NN + huberloss + er + targetNN
-res5 = []
-for i in range(5):
-    res5.append(main(TAU=5, num_memory=10000, loss='huberloss',num=i))
-
-# 6 pure NN + huberloss + er + targetNN
-res6 = []
-for i in range(5):
-    res6.append(main(TAU=25, num_memory=10000, loss='huberloss',num=i))
+## 3 pure NN + cr+ huberloss + er
+#res3 = []
+#for i in range(5):
+#    res3.append(main(TAU=1, num_memory=100, loss='huberloss', use_clip_reward=True, num=i))
 #
 #
+## 4 pure NN + cr + huberloss + er
+#res4 = []
+#for i in range(5):
+#    res4.append(main(TAU=1, num_memory=10000, loss='huberloss', use_clip_reward=True, num=i))
+#
+#
+## 5 pure NN + cr + huberloss + er + targetNN
+#res5 = []
+#for i in range(5):
+#    res5.append(main(TAU=5, num_memory=10000, loss='huberloss', use_clip_reward=True, num=i))
+#
+## 6 pure NN + cr+ huberloss + er + targetNN
+#res6 = []
+#for i in range(5):
+#    res6.append(main(TAU=25, num_memory=10000, loss='huberloss', use_clip_reward=True, num=i))
+#
+#
+# 7 pure NN + clip_reward
+res7 = []
+for i in range(5):
+    res2.append(main(TAU=1, num_memory=1, loss='mse', use_clip_reward=True, num=i))
+
+
 results = [res1,res2,res3,res4,res5,res6]
 plt.savefig(path +  'dqn_result.png')
 
