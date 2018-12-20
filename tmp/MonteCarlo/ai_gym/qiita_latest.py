@@ -19,6 +19,7 @@ from keras.layers import Input, Dense, Reshape, Flatten, Dropout
 from keras.optimizers import Adam, SGD, RMSprop
 from keras import backend as K
 import tensorflow as tf
+import time
 
 
 # 学習用パラメータ
@@ -29,7 +30,7 @@ render = 0 # 描画モード
 num_episode = 1601
 
 # ファイル保存用パラメータ
-fileOut = False
+fileOut = True
 now = datetime.datetime.now().strftime('%Y%m%d%H%M%S')
 path = './' # 保存先フォルダ(フォルダが自動生成される)
 #path = '/volumes/data/dataset/ai_gym/'
@@ -38,10 +39,12 @@ os.mkdir(path +now + '/fig')
 os.mkdir(path +now + '/theta')
 myfile = os.path.dirname(os.path.abspath(__file__)) + '/true_online_sarsa_wx_mountaincar.py'
 shutil.copyfile(myfile, path +now + '/theta.setting.py')
+draw_all_action = False
 
 # 画像ファイル描画用パラメータ
 meshgrid = 25 # 描画のグリッド間隔（学習とは関係無い）
-rec_interval = 25 # 画像を保存するステップ間隔
+rec_interval = 500000 # 画像を保存するステップ間隔
+one_step_record = False
 
 # Mountaincar
 game = 'MountainCar-v0'
@@ -49,6 +52,9 @@ env = gym.make('MountainCar-v0')
 NUM_STATE = 2
 NUM_ACTION = 3
 
+
+from gym import wrappers
+#env = wrappers.Monitor(env, "/Users/tu_MB12/Documents/github/reinforcement_learning/qiita", video_callable=(lambda ep: ep % 1600 == 0))
 
 
 class TableAgent:
@@ -93,7 +99,7 @@ class TableAgent:
         Qval_dash = self.getQ(s_dash,a_dash)
         self.Q[a,s[0],s[1]] = Qval + ALPHA * (reward + GAMMA * Qval_dash - Qval)
 
-    def draw_meshgrid(self): # 画像保存の値を出力
+    def calc_Z(self): # 画像保存の値を出力
         x = np.linspace(self.min_list[0],self.max_list[0],meshgrid)
         y = np.linspace(self.min_list[1],self.max_list[1],meshgrid)
         X,Y = np.meshgrid(x,y)
@@ -173,7 +179,7 @@ class LinearFuncAgent:
         # パラメータの更新
         self.theta_list[a] = self.theta_list[a] + ALPHA * DELTA * X[a]
 
-    def draw_meshgrid(self):
+    def calc_Z(self):
         x = np.linspace(self.min_list[0],self.max_list[0],meshgrid)
         y = np.linspace(self.min_list[1],self.max_list[1],meshgrid)
         X,Y = np.meshgrid(x,y)
@@ -184,13 +190,11 @@ class LinearFuncAgent:
    
 class DqnAgent:
     num_batch = 16
-    hidden1 = 32
-    hidden2 = 16
     num_memory = 10000
     min_list = env.observation_space.low  # 下限値 [-1.2 -0.07]
     max_list = env.observation_space.high  # 上限値 [-0.6, 0.07]
 
-    def __init__(self, lr, h1, h2, TAU, num_memory, in_dim, out_dim, eps_ini, eps_last):
+    def __init__(self, lr, h1, h2, TAU, num_memory, in_dim, out_dim, eps_ini, eps_last, use_clip_reward):
         self.done = False
         self.lr = lr    # learning rate
         self.h1 = h1    # 1st hidden layer
@@ -202,6 +206,7 @@ class DqnAgent:
         self.eps_last = eps_last
         self.alpha_ini = 0 # dummy # 他のクラスとの共通化のためダミー
         self.alpha_last = 0 # dummy
+        self.use_clip_reward = use_clip_reward
         self.buff = ReplayBuffer(self.num_memory)
         self.model = self.build_model() # モデルを生成
         self.targetModel = self.build_model()
@@ -247,12 +252,14 @@ class DqnAgent:
 
     def train(self,s,a,reward,s_dash,a_dash):
         # special reward for DQN
-        reward = 0
-        if self.done:
-            if reward > -200:
-                reward = +1
-            else:
-                reward = -1
+        if use_clip_reward:
+            reward = 0
+            if self.done:
+                if reward > -200:
+                    reward = +1
+                else:
+                    reward = -1
+
         self.buff.add(s,a,reward,s_dash,a_dash,self.done)
         batch = self.buff.getBatch(self.num_batch)
         s_batch =  np.asarray([e[0] for e in batch])
@@ -273,7 +280,7 @@ class DqnAgent:
         self.targetModel.set_weights(self.model.get_weights())
 
 
-    def draw_meshgrid(self):
+    def calc_Z(self):
         x = np.linspace(self.min_list[0],self.max_list[0],meshgrid)
         y = np.linspace(self.min_list[1],self.max_list[1],meshgrid)
         X,Y = np.meshgrid(x,y)
@@ -281,7 +288,7 @@ class DqnAgent:
         return X, Y, Z
 
 
-class ReplayBuffer(object):
+class ReplayBuffer:
 
     def __init__(self, buffer_size):
         self.buffer_size = buffer_size
@@ -316,23 +323,71 @@ class ReplayBuffer(object):
         self.buffer = deque()
         self.num_experiences = 0
 
+class Result:
 
+    def __init__(self):
+        self.action_list = []
+        self.reward_list = []
+        self.time_list = []
+
+    def draw_meshgrid(self, agent, draw_all_action):
+        X,Y,Z = agent.calc_Z()
+
+        if (draw_all_action):
+            fig = plt.figure(figsize=(40,10))
+            plt.title('episode: %4d,   epsilon: %.3f,   alpha: %.3f,   average_reward: %3f' %(epi, EPSILON, ALPHA, np.mean(self.reward_list)))
+
+            ax1 = fig.add_subplot(141, projection='3d')
+            plt.gca().invert_zaxis()
+            ax1.plot_wireframe(X,Y,Z[0], rstride=1, cstride=1)
+
+            ax2 = fig.add_subplot(142, projection='3d')
+            plt.gca().invert_zaxis()
+            ax2.plot_wireframe(X,Y,Z[1], rstride=1, cstride=1)
+            
+            ax3 = fig.add_subplot(143, projection='3d')
+            plt.gca().invert_zaxis()
+            ax3.plot_wireframe(X,Y,Z[2], rstride=1, cstride=1)
+
+
+            ax4 = fig.add_subplot(144)
+            sns.heatmap(np.argmax(Z, axis=0))
+            plt.gca().invert_yaxis()
+        else:
+            fig = plt.figure(figsize=(10,10))
+
+            ax1 = fig.add_subplot(111, projection='3d')
+            ax1.set_xlabel('position')
+            ax1.set_ylabel('speed')
+            ax1.set_zlabel('V')
+
+            ax1.set_title('episode: %4d,   epsilon: %.3f,   alpha: %.3f,   average_reward: %3d' %(epi, EPSILON, ALPHA, np.mean(self.reward_list)))
+            plt.gca().invert_zaxis()
+            ax1.plot_wireframe(X,Y,Z[2], rstride=1, cstride=1)
+
+    def get_moving_ave(self, tap):
+        d = np.ones(tap)/(1.0*tap)
+        data = np.convolve(self.reward_list, d, 'same')
+        return data
+            
+
+        
 
 
 
 # Agentの選択
-#agent = LinearFuncAgent(N=30, sigma=0.1,alpha_ini=0.2, alpha_last=0,\
-#                        eps_ini=0, eps_last=0)
-#agent = TableAgent(N=30, alpha_ini=0.5, alpha_last=0, \
-#                        eps_ini=0, eps_last=0)
-agent = DqnAgent(lr=1.E-4, h1=320, h2=160, TAU=5, num_memory = 10000, in_dim=NUM_STATE, out_dim=NUM_ACTION, eps_ini=0, eps_last=0)
+#agent = LinearFuncAgent(N=30, sigma=0.1,alpha_ini=0.2, alpha_last=0, eps_ini=0, eps_last=0)
+#agent = TableAgent(N=30, alpha_ini=0.5, alpha_last=0, eps_ini=0, eps_last=0)
+agent = DqnAgent(lr=1.E-4, h1=32, h2=16, TAU=5, num_memory = 10000, in_dim=NUM_STATE, out_dim=NUM_ACTION, eps_ini=0, eps_last=0, use_clip_reward=False)
 
 reward_list = []
+res = Result()  # 結果を格納するクラス
 
+start_time = time.time()
 for epi in range(int(num_episode)):
     
    
-    action_result = np.zeros(NUM_ACTION)
+    res.action_result = np.zeros(NUM_ACTION)
     tmp = 0 # 報酬積算用
     count = 0
 
@@ -373,61 +428,48 @@ for epi in range(int(num_episode)):
         a = a_dash
         s = s_dash
 
-        action_result[a_dash] +=1
+        res.action_result[a_dash] +=1
         tmp += reward
+        if (one_step_record) :
+            X,Y,Z = agent.calc_Z()
+            res.draw_meshgrid(agent, draw_all_action)
+            plt.savefig(path + now + '/fig/mountaincar_Q_%04d_%03d.png' % (epi, count))
+            plt.close()
         count +=1
 
 
-    reward_list.append(tmp)
+    res.reward_list.append(tmp)
+    res.time_list.append(time.time() - start_time)
     
     #print( agent.theta_list)
     print("epi: %d, eps: %.3f, alpha: %.3f, reward %d: " % (epi, EPSILON, ALPHA, tmp))
-    print(action_result)
+    print(res.action_result)
 
             
             
 
     if (fileOut & (epi %rec_interval == 0)) :
-        X,Y,Z = agent.draw_meshgrid()
-
-        if (True):
-            fig = plt.figure(figsize=(40,10))
-            plt.title('episode: %4d,   epsilon: %.3f,   alpha: %.3f,   average_reward: %3d' %(epi, EPSILON, ALPHA, np.mean(reward_list)))
-
-            ax1 = fig.add_subplot(141, projection='3d')
-            plt.gca().invert_zaxis()
-            ax1.plot_wireframe(X,Y,Z[0], rstride=1, cstride=1)
-
-            ax2 = fig.add_subplot(142, projection='3d')
-            plt.gca().invert_zaxis()
-            ax2.plot_wireframe(X,Y,Z[1], rstride=1, cstride=1)
-            
-            ax3 = fig.add_subplot(143, projection='3d')
-            plt.gca().invert_zaxis()
-            ax3.plot_wireframe(X,Y,Z[2], rstride=1, cstride=1)
-
-
-            ax4 = fig.add_subplot(144)
-            sns.heatmap(np.argmax(Z, axis=0))
-            plt.gca().invert_yaxis()
-        else:
-            fig = plt.figure(figsize=(10,10))
-
-            ax1 = fig.add_subplot(111, projection='3d')
-            ax1.set_xlabel('position')
-            ax1.set_ylabel('speed')
-            ax1.set_zlabel('V')
-
-            ax1.set_title('episode: %4d,   epsilon: %.3f,   alpha: %.3f,   average_reward: %3d' %(epi, EPSILON, ALPHA, np.mean(reward_list)))
-            plt.gca().invert_zaxis()
-            ax1.plot_wireframe(X,Y,Z[2], rstride=1, cstride=1)
-            
+        X,Y,Z = agent.calc_Z()
+        res.draw_meshgrid(agent, draw_all_action)
         plt.savefig(path + now + '/fig/mountaincar_Q_%04d.png' % (epi))
         plt.close()
 
-result.append(reward_list)
 env.close()
 
-plt.plot(reward_list)
+tap = 10
+data = res.get_moving_ave(tap=10)
+plt.plot(data)
+plt.title('reward_list tap:%d' % tap)
 plt.savefig(path + now + '/fig/reward_list.png')
 plt.close()
+
+plt.plot(res.time_list, data)
+plt.title('reward_list tap:%d' % tap)
+plt.savefig(path + now + '/fig/reward_list_time.png')
+plt.close()
+
+np.savez(path+now+  "/theta/res.npz", action_list=np.array(res.action_list),\
+                    reward_list=np.array(res.reward_list),\
+                    time_list=np.array(res.time_list))
+
+
