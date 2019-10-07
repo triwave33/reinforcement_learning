@@ -12,13 +12,14 @@ import glob
 import func 
 import time
 import os
+import shutil
 
 env = gym.make('MountainCar-v0')
 
 num_action_original = env.action_space.n
 
 N =3 # N分割
-play_count = 10
+play_count = 100
 
 use_ext_disk = False
 

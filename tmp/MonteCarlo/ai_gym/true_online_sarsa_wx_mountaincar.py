@@ -11,35 +11,39 @@ import seaborn as sns
 import os
 import datetime
 import shutil
+import sys
+
+
 ACTIONS = [0,1,2]
 ALPHA =1.0E-8
-ALPHA_INI = 1.0E-1
+ALPHA_INI = 2.E-1
 ALPHA_LAST = 0.0E-2
-GAMMA = 0.99
+GAMMA = 0.98
 EPS_INI = 0.0
-EPS_LAST = 0
+EPS_LAST = 0.0
 LAMBDA = 0.0
 render = 0 # 描写モード
-ex_factor = 1.0 # epsilonがゼロになったあとも学習を続けるパラメータ
+ex_factor = 2.0 # epsilonがゼロになったあとも学習を続けるパラメータ
 sigma=0.1
+print(EPS_INI)
 use_potential_reward = False # 位置に応じた報酬
 use_velosity_reward = False # 速度に応じた報酬
 use_binary_action = False # 左・右のみのアクション
-num_episode = 2001
+num_episode = 401
 
 now = datetime.datetime.now().strftime('%Y%m%d%H%M')
 
 
-#path = './'
-path = '/volumes/data/dataset/ai_gym/'
+path = './'
+#path = '/volumes/data/dataset/ai_gym/'
 os.mkdir(path +now)
 os.mkdir(path +now + '/fig')
 os.mkdir(path +now + '/theta')
 myfile = os.path.dirname(os.path.abspath(__file__)) + '/true_online_sarsa_wx_mountaincar.py'
 shutil.copyfile(myfile, path +now + '/theta.setting.py')
-N =100 # N分割
+N =32 # N分割
 meshgrid = 25
-grid_interval = 500
+grid_interval = 100
 
 # Ai GymのCartPoleを使用
 #game = 'CartPole-v0'
@@ -143,6 +147,8 @@ upsampling = 1
 
 #for epi in tqdm(range(int(num_episode*ex_factor))):
 reward_list = []
+s_list = []
+a_list = []
 min_pos = min_list[0]
 max_pos = max_list[1]
 
@@ -158,6 +164,8 @@ for epi in range(int(num_episode*ex_factor)):
 
     # initialize s
     s = env.reset() # 環境をリセット
+    if epi ==0:
+        s = np.array([-0.44982587,0.])
     
     # e-greedyによる行動選択   
     a = select_action(s, theta, c, EPSILON, num_action, sigma)
@@ -171,9 +179,15 @@ for epi in range(int(num_episode*ex_factor)):
     Q_val_old = 0
     z = np.zeros(b)
 
+    s_list_episode = []
+    a_list_episode = []
+
     while(done==False):
         if render:
             env.render()
+
+        s_list_episode.append(s)
+        a_list_episode.append(a)
         
 
         # 行動aをとり、r, s'を観測
@@ -208,7 +222,8 @@ for epi in range(int(num_episode*ex_factor)):
 
         z = GAMMA * LAMBDA * z + (1- ALPHA * GAMMA * LAMBDA * ((z.T).dot(x)))*x
 
-        theta = theta + ALPHA*(DELTA + Q_val - Q_val_old)*z - ALPHA*(Q_val - Q_val_old)*x
+        #theta = theta + ALPHA*(DELTA + Q_val - Q_val_old)*z - ALPHA*(Q_val - Q_val_old)*x
+        theta = theta + ALPHA*(DELTA) *x
 
         Q_val_old = Q_val_dash
 
@@ -228,6 +243,8 @@ for epi in range(int(num_episode*ex_factor)):
         print("SUCEED")
 
     reward_list.append(tmp)
+    s_list.append(s_list_episode)
+    a_list.append(a_list_episode)
     memory = np.array(visit_list)
     
     print( theta)
@@ -242,9 +259,9 @@ for epi in range(int(num_episode*ex_factor)):
         x = np.linspace(min_list[0],max_list[0],meshgrid)
         y = np.linspace(min_list[1],max_list[1],meshgrid)
         X,Y = np.meshgrid(x,y)
+        Z = np.array([[[Q_for_meshgrid(i,j,k,theta,c,sigma) for i in x] for j in y] for k in range(num_action)])
 
-        if (True):
-            Z = np.array([[[Q_for_meshgrid(i,j,k,theta,c,sigma) for i in x] for j in y] for k in range(num_action)])
+        if (False):
             fig = plt.figure(figsize=(40,10))
             plt.title('episode: %4d,   epsilon: %.3f,   alpha: %.3f,   average_reward: %3d' %(epi, EPSILON, ALPHA, np.mean(reward_list)))
 
@@ -273,11 +290,10 @@ for epi in range(int(num_episode*ex_factor)):
             ax1.set_ylabel('speed')
             ax1.set_zlabel('V')
 
-            ax1.set_title('episode: %4d,   epsilon: %.3f,   alpha: %.3f,   average_reward: %3d' %(epi, EPSILON, ALPHA, np.mean(sssxweward_list)))
+            ax1.set_title('episode: %4d,   epsilon: %.3f,   alpha: %.3f,   average_reward: %3d' %(epi, EPSILON, ALPHA, np.mean(reward_list)))
             #ax1.set_zlim(-40,0)
-            #plt.gca().invert_zaxis()
-            Z = np.array([[Q_for_meshgrid(i,j,0,theta,c) for i in x] for j in y])
-            ax1.plot_wireframe(X,Y,Z, rstride=2, cstride=2)
+            plt.gca().invert_zaxis()
+            ax1.plot_wireframe(X,Y,Z[2], rstride=1, cstride=1)
             
 
 
@@ -289,7 +305,9 @@ for epi in range(int(num_episode*ex_factor)):
 
     env.close()
 
-plt.plot(reward_list)
+#plt.plot(reward_list)
 plt.savefig(path + now + '/fig/reward_list.png')
 plt.close()
-np.save(path + now + '/theta/reward_list', np.array(reward_list))
+np.save(path + now + '/theta/reward_list' , np.array(reward_list))
+np.save(path + now + '/theta/s_list' , np.array(s_list))
+np.save(path + now + '/theta/a_list' , np.array(a_list))
