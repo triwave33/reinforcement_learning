@@ -25,7 +25,7 @@ ACTIONS = [0,1,2]
 ALPHA = 0.1
 ALPHA_INI = 0.1
 ALPHA_LAST = 0.1
-GAMMA = 1.
+GAMMA = 0.99
 EPS_INI = 0.5
 EPS_LAST = 0.2
 num_state = 2
@@ -63,7 +63,7 @@ for up in range(upsampling):
         #for epi in tqdm(range(int(num_episode*ex_factor))):
         reward_list = []
         min_pos = min_list[0]
-        max_pos = max_list[1]
+        max_pos = max_list[0]
 
         for epi in range(int(num_episode*ex_factor)):
             # greedy方策を徐々に確定的にしていく
@@ -80,31 +80,9 @@ for up in range(upsampling):
             tmp = 0 # 報酬積算用
             count = 0
 
-
-
  
             # エピソードを終端までプレイ
             while(done==False):
-
-                #if count %20 == 0:
-                #    x = np.linspace(min_list[0],max_list[0],N)
-                #    y = np.linspace(min_list[1],max_list[1],N)
-                #    X,Y = np.meshgrid(x,y)
-    
-                #    fig = plt.figure(figsize=(10,10))
-                #    ax1 = fig.add_subplot(111, projection='3d')
-                #    ax1.set_xlabel('x')
-                #    #ax1.set_xlim(-0.5,0.5)
-                #    #ax1.set_ylim(-0.5,0.5)
-                #    ax1.set_zlim(-10,0)
-                #    plt.gca().invert_zaxis()
-                #    ax1.plot_wireframe(X,Y,Q[0,:,:], rstride=1, cstride=1)
-                #    #ax1.plot_wireframe(X,Y,Q[0,:,:], rstride=max(1,2**(up-1)), cstride=max(1,2**(up-1)))
-                #    #ax1.plot_surface(X,Y,Q[0,:,:], cmap='bwr', linewidth=0)
-                #    #sns.heatmap(Q[0,:,:])
-                #    plt.savefig('mountaincar_Q_%d_%04d_%03d.png' % (up, epi, count))
-                #    plt.close()
-
  
                 if render:
                     env.render()
@@ -191,7 +169,7 @@ for up in range(upsampling):
 
 
      
-            print("N: %d, epi: %d, eps#: %.3f, reward: %3d, min_pos: %d, max_pos: %d" % (N, epi, EPSILON, tmp, min_pos, max_pos))
+            print("N: %d, epi: %d, eps#: %.3f, reward: %3d" % (N, epi, EPSILON, tmp))
             Q_10trial[trial, epi] = tmp
             reward_array[epi] = tmp
             env.close()
