@@ -81,7 +81,7 @@ for epi in 1:(Int(round(num_episode * ex_factor)))
         # action selecton by e-greedy
         a = select_action(Q, s, EPSILON)
 
-        visit_array[a, s[1], s[2]] += 1
+    e   visit_array[a, s[1], s[2]] += 1
 
 
         observation, reward, done, info = env.pystep(a-1) # -1 for python consistensy

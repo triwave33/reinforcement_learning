@@ -73,7 +73,7 @@ for up in range(upsampling):
             # sの初期化
             done = False
             observation = env.reset() # 環境をリセット
-            # 状態を離散化
+             状態を離散化
             s = [int(np.digitize(observation[i], np.linspace(min_list[i],\
                     max_list[i], N-1))) for i in range(num_state)]
             
