@@ -6,25 +6,16 @@ using Plots
 #env_name = :MountainCar
 #env_name = :CartPole
 env_name = :MountainCar
-
 env = GymEnv(env_name, :v0)
 
 
-if env_name == :MountainCar
-    min_list = [-1.2, -0.1]::Array{Float64, 1}
-    max_list = [0.6,0.1]::Array{Float64, 1}
-    const num_state = 2::Int64
-    const num_action =3::Int64
-elseif env_name ==:CartPole
-    min_list = [-4.8, -3.4, -0.4, -3.4]::Array{Float64, 1}
-    max_list = [4.8, 3.4, 0.4, 3.4]::Array{Float64, 1}
-    const num_state = 4::Int64
-    const num_action =2::Int64
-end
+min_list = [-1.2, -0.1]::Array{Float64, 1}
+max_list = [0.6,0.1]::Array{Float64, 1}
+const num_state = 2::Int64
+const num_action =3::Int64
 
-# State space
+# State resolution
 const N = 32::Int64
-
  
  
 #ACTIONS = range(0,num_action-1, step=1)  # should be 0-based
@@ -34,7 +25,7 @@ const ALPHA_LAST = 0.1::Float64
 const GAMMA = 0.99::Float64
 const EPS_INI = 0.5::Float64
 const EPS_LAST = 0.0::Float64
-const num_episode = 10000::Int64 # sampling num
+const num_episode = 50000::Int64 # sampling num
 const render = false
 const ex_factor = 1.0::Float64 # 
 const save_interval = 500::Int64
@@ -69,6 +60,7 @@ end
  
 function make_gif(hist)
     anim = @animate for (i,q) in enumerate(hist)
+        epi = i * save_interval
         P = plot(size=(800,800))
         #plot!(legend=false, axis=false, grid=false, aspectratio=1)
         x = range(min_list[1], max_list[1], length=N)
@@ -76,7 +68,7 @@ function make_gif(hist)
         #z = [Q[1,i,j] for i in x, j in y]'
         z = -q[1,:,:]
         z = z'
-        P = plot!(x,y,z, st=:wireframe, title="$i")
+        P = plot!(x,y,z, st=:wireframe, title="$epi")
         
         end
     gifname = "out/mountaincar.gif"
