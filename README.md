@@ -1,12 +1,27 @@
 # reinforcement_learning
-
 (日本語による説明は一番下にあります)
+
+
+
+<br>
+
+<img width="400" alt="IMG_CD5BE22E35D2-1.jpeg" src="https://camo.qiitausercontent.com/63d0b9f26bdbf8cb60ff52527aab278c13a795ac/68747470733a2f2f71696974612d696d6167652d73746f72652e73332e616d617a6f6e6177732e636f6d2f302f3233333230382f33346163363464642d383366362d333065332d613464612d3534626432323235306564332e676966">
+Value function approximation using Linear kernel functions.
+
+<br>
+<br>
+<br>
+
+## Overview
 
 This repository is an archive of my learning for reinforcement learning according to a great book "Reinforce ment learning" by Sutton, S.S. and Andrew, G.B. (Japanese edition).
 
 Some algorithms in the book are implemented and examples described there are solved from full scrach (not using any RL libraries).
 
 Detailed description for each script is descripted in my blog (https://qiita.com/triwave33 BUT sorry in Japanese)
+
+
+
 
 ## Grid World
 <img width="597" alt="IMG_CD5BE22E35D2-1.jpeg" src="https://qiita-image-store.s3.amazonaws.com/0/233208/74500b1a-3802-0533-099b-2348e5539dc6.jpeg">
